@@ -22,8 +22,11 @@ pub const Target = struct {
         const buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, true, .{ .element_count = pixels_count });
         const accumulation_buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, false, .{ .element_count = pixels_count });
 
-        const rng_seed = try allocator.alloc(u32, pixels_count);
+        var rng_seed = try allocator.alloc(u32, pixels_count);
         defer allocator.free(rng_seed);
+        for (rng_seed, 0..) |*value, index| {
+            value.* = @truncate(index);
+        }
         const rng_state_buffer = try Storage(u32).init(allocator, context, false, .{ .data = rng_seed });
 
         var self = try allocator.create(Self);
