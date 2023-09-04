@@ -1,4 +1,8 @@
 const std = @import("std");
+const zmath = @import("libs/zig-gamedev/libs/zmath/build.zig");
+const zgpu = @import("libs/zig-gamedev/libs/zgpu/build.zig");
+const zpool = @import("libs/zig-gamedev/libs/zpool/build.zig");
+const zglfw = @import("libs/zig-gamedev/libs/zglfw/build.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -11,19 +15,17 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    //exe.defineCMacro("_GLFW_WIN32", null);
-    exe.addIncludePath(std.Build.LazyPath.relative("libs/glfw/include/GLFW"));
-    exe.addObjectFile(std.Build.LazyPath.relative("libs/glfw/lib-mingw-w64/libglfw3dll.a"));
-    exe.addObjectFile(std.Build.LazyPath.relative("libs/glfw/lib-mingw-w64/libglfw3.a"));
-    b.installFile("libs/glfw/lib-mingw-w64/glfw3.dll", "bin/glfw3.dll");
+    const zmath_pkg = zmath.package(b, target, optimize, .{ .options = .{ .enable_cross_platform_determinism = true } });
+    const zglfw_pkg = zglfw.package(b, target, optimize, .{});
+    const zpool_pkg = zpool.package(b, target, optimize, .{});
+    const zgpu_pkg = zgpu.package(b, target, optimize, .{
+        .deps = .{ .zpool = zpool_pkg.zpool, .zglfw = zglfw_pkg.zglfw },
+    });
 
-    exe.addIncludePath(std.Build.LazyPath.relative("libs/wgpu"));
-    exe.addLibraryPath(std.Build.LazyPath.relative("libs/wgpu"));
-    b.installFile("libs/wgpu/wgpu_native.dll", "bin/wgpu_native.dll");
-    exe.linkSystemLibraryName("wgpu_native.dll");
-    exe.linkSystemLibraryName("wgpu_native");
+    zmath_pkg.link(exe);
+    zgpu_pkg.link(exe);
+    zglfw_pkg.link(exe);
 
-    exe.linkSystemLibraryName("user32");
     exe.linkLibC();
 
     b.installArtifact(exe);

@@ -1,24 +1,74 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("webgpu.h");
-});
-const ComputeUnit = @import("compute_unit.zig").ComputeUnit;
-const scene = @import("scene.zig");
-const Scene = scene.Scene;
+const wgpu = @import("zgpu").wgpu;
+const zmath = @import("zmath");
+const util = @import("util.zig");
+const WgpuContext = @import("wgpu/wgpu_context.zig").WgpuContext;
+const PathTracer = @import("wgpu/path_tracer.zig").PathTracer;
+const materials = @import("materials/material.zig");
+pub const Material = materials.Material;
+const geometry = @import("geometry/geometry.zig");
+pub const Scene = geometry.Scene;
+pub const Camera = geometry.Camera;
+pub const Aabb = geometry.Aabb;
+pub const Sphere = geometry.Sphere;
+pub const Mesh = geometry.Mesh;
+pub const MeshInstance = geometry.MeshInstance;
 
 pub const Context = struct {
-    state: State,
-    scene: Scene,
-    compute_unit: ComputeUnit,
     const Self = @This();
+    allocator: std.mem.Allocator,
+    state: State,
+    scene: ?*Scene,
+    materials: std.ArrayList(*Material),
+    spheres: std.ArrayList(*Sphere),
+    meshes: std.ArrayList(*Mesh),
+    mesh_instances: std.ArrayList(*MeshInstance),
+    wgpu_path_tracer: ?*PathTracer,
+    wgpu_context: *WgpuContext,
 
-    pub fn init(allocator: *std.mem.Allocator, width: u32, height: u32, surface_descriptor: ?*c.WGPUSurfaceDescriptor) !Self {
-        return .{ .state = State.init(width, height), .scene = Scene.init(), .compute_unit = try ComputeUnit.init(allocator, surface_descriptor) };
+    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu.SurfaceDescriptor) !*Self {
+        var self = try allocator.create(Self);
+        self.* = .{
+            .allocator = allocator,
+            .state = State.init(),
+            .scene = null,
+            .materials = std.ArrayList(*Material).init(allocator),
+            .spheres = std.ArrayList(*Sphere).init(allocator),
+            .meshes = std.ArrayList(*Mesh).init(allocator),
+            .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
+            .wgpu_context = try WgpuContext.init(allocator, surface_descriptor),
+            .wgpu_path_tracer = null,
+        };
+        return self;
     }
 
-    pub fn deinit(self: Self) void {
-        self.scene.deinit();
-        self.compute_unit.deinit();
+    pub fn deinit(self: *Self) void {
+        defer self.allocator.destroy(self);
+        if (self.scene) |scene| {
+            scene.deinit();
+        }
+        if (self.wgpu_path_tracer) |path_tracer| {
+            path_tracer.deinit();
+        }
+        self.destroyElements(&self.spheres);
+        self.spheres.deinit();
+        self.destroyElements(&self.meshes);
+        self.meshes.deinit();
+        self.destroyElements(&self.mesh_instances);
+        self.mesh_instances.deinit();
+        self.destroyElements(&self.materials);
+        self.materials.deinit();
+        self.wgpu_context.deinit();
+    }
+
+    pub fn setScene(self: *Self, scene: *Scene) !void {
+        self.scene = scene;
+        self.wgpu_path_tracer = try PathTracer.init(
+            self.allocator,
+            self.wgpu_context,
+            &self.state,
+            scene,
+        );
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -53,11 +103,11 @@ pub const Context = struct {
         return self.state.getIterations();
     }
 
-    pub fn setResolution(self: *Self, width: u32, height: u32) void {
-        self.state.setResolution(width, height);
+    pub fn setResolution(self: *Self, resolution: util.Resolution) void {
+        self.state.setResolution(resolution);
     }
 
-    pub fn getResolution(self: Self) struct { u32, u32 } {
+    pub fn getResolution(self: Self) util.Resolution {
         return self.state.getResolution();
     }
 
@@ -68,11 +118,108 @@ pub const Context = struct {
     pub fn getRayCastEpsilon(self: Self) f32 {
         return self.state.getRayCastEpsilon();
     }
+
+    pub fn lambertian(self: *Self, albedo: zmath.Vec) std.mem.Allocator.Error!*Material {
+        var material = try self.allocator.create(Material);
+        material.* = Material{
+            .albedo = albedo,
+            .materia_type = 0,
+
+            .fuzz = undefined,
+            .ior = undefined,
+            .material_index = null,
+        };
+        try self.materials.append(material);
+        return material;
+    }
+
+    pub fn metal(self: *Self, albedo: zmath.Vec, fuzz: f32) std.mem.Allocator.Error!*Material {
+        var material = try self.allocator.create(Material);
+        material.* = Material{
+            .albedo = albedo,
+            .fuzz = fuzz,
+            .materia_type = 1,
+
+            .ior = undefined,
+            .material_index = null,
+        };
+        try self.materials.append(material);
+        return material;
+    }
+
+    pub fn dielectric(self: *Self, ior: f32) std.mem.Allocator.Error!*Material {
+        var material = try self.allocator.create(Material);
+        material.* = Material{
+            .ior = ior,
+            .materia_type = 2,
+
+            .albedo = undefined,
+            .fuzz = undefined,
+            .material_index = null,
+        };
+        try self.materials.append(material);
+        return material;
+    }
+
+    pub fn diffuseLight(self: *Self, albedo: zmath.Vec) std.mem.Allocator.Error!*Material {
+        return self.addEleemnt(
+            Material{
+                .albedo = albedo,
+                .materia_type = 3,
+
+                .albedo = undefined,
+                .fuzz = undefined,
+                .ior = undefined,
+                .material_index = null,
+            },
+            &self.materials,
+        );
+    }
+
+    pub fn releaseMaterial(self: *Self, material: *const Material) void {
+        self.releaseElement(material, &self.materials);
+    }
+
+    pub fn createSphere(self: *Self, center: zmath.Vec, radius: f32, material: *Material) std.mem.Allocator.Error!*Sphere {
+        const radius_v = zmath.f32x4(radius, radius, radius, 0.0);
+        return self.addEleemnt(
+            Sphere{
+                .transform = zmath.mul(zmath.scalingV(radius_v), zmath.translationV(center)),
+                .material = material,
+                .aabb = Aabb.init(center - radius_v, center + radius_v),
+            },
+            &self.spheres,
+        );
+    }
+
+    pub fn releaseSphere(self: *Self, sphere: *const Sphere) void {
+        self.releaseElement(sphere, &self.spheres);
+    }
+
+    fn addEleemnt(self: *Self, to_add: anytype, list: *std.ArrayList(*@TypeOf(to_add))) std.mem.Allocator.Error!*@TypeOf(to_add) {
+        var el = try self.allocator.create(@TypeOf(to_add));
+        el.* = to_add;
+        try list.append(el);
+        return el;
+    }
+
+    fn releaseElement(self: *Self, to_remove: anytype, list: *std.ArrayList(@TypeOf(to_remove))) void {
+        for (list.items, 0..) |el, index| {
+            if (el == to_remove) {
+                _ = list.swapRemove(index);
+                self.allocator.destroy(to_remove);
+            }
+        }
+    }
+
+    fn destroyElements(self: *Self, list: anytype) void {
+        for (list.items) |el| self.allocator.destroy(el);
+    }
 };
 
-const State = struct {
-    width: u32,
-    height: u32,
+pub const State = struct {
+    const Self = @This();
+    resolution: util.Resolution,
     depth: u32,
     flip_y: bool,
     inverted_gamma: f32,
@@ -80,12 +227,9 @@ const State = struct {
     ray_cast_epsilon: f32,
     dirty: bool = true,
 
-    const Self = @This();
-
-    pub fn init(width: u32, height: u32) Self {
+    pub fn init() Self {
         return .{
-            .width = width,
-            .height = height,
+            .resolution = .{ .width = 500, .height = 500 },
             .depth = 10,
             .flip_y = false,
             .inverted_gamma = 1.0,
@@ -96,7 +240,7 @@ const State = struct {
     }
 
     fn makeDirty(self: *Self) void {
-        self.*.dirty = true;
+        self.dirty = true;
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -135,14 +279,13 @@ const State = struct {
         return self.iterations;
     }
 
-    pub fn setResolution(self: *Self, width: u32, height: u32) void {
-        self.width = width;
-        self.height = height;
+    pub fn setResolution(self: *Self, resolution: util.Resolution) void {
+        self.resolution = resolution;
         self.makeDirty();
     }
 
-    pub fn getResolution(self: Self) struct { u32, u32 } {
-        return .{ self.width, self.height };
+    pub fn getResolution(self: Self) util.Resolution {
+        return self.resolution;
     }
 
     pub fn setRayCastEpsilon(self: *Self, ray_cast_epsilon: f32) void {

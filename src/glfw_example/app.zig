@@ -1,70 +1,92 @@
 const std = @import("std");
-const c = @cImport({
-    @cInclude("glfw3.h");
-    @cInclude("webgpu.h");
-    @cInclude("wgpu.h");
-});
+const zglfw = @import("zglfw");
+const wgpu = @import("zgpu").wgpu;
+const util = @import("../util.zig");
 const ornament = @import("../ornament.zig");
+const Viewport = @import("../wgpu/viewport.zig").Viewport;
 
-const width: i32 = 1000;
-const height: i32 = 1000;
-const title: [*c]const u8 = "ornament";
+const width = 1500;
+const height = 1000;
+const title = "ornament";
 
 pub fn run() !void {
-    var app = try App.init();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit() == .leak) @panic("[glfw_example] memory leak");
+
+    var app = try App.init(gpa.allocator());
     defer app.deinit();
-    app.event_loop();
+    app.setUpCallbacks();
+    try app.renderLoop();
 }
 
-pub const GlfwError = error{ IntializationFailed, WindowCreationFailed };
-extern fn glfwGetWin32Window(window: ?*c.GLFWwindow) ?*anyopaque;
-
 const App = struct {
-    gpa: std.heap.GeneralPurposeAllocator(.{}),
-    allocator: std.mem.Allocator,
-    window: *c.GLFWwindow,
-    ornament: ornament.Context,
-
     const Self = @This();
+    allocator: std.mem.Allocator,
+    window: *zglfw.Window,
+    ornament: *ornament.Context,
+    wgpu_viewport: *Viewport,
 
-    pub fn init() !Self {
-        if (c.glfwInit() == c.GLFW_FALSE) {
-            return GlfwError.IntializationFailed;
-        }
+    pub fn init(allocator: std.mem.Allocator) !Self {
+        std.log.debug("[glfw_example] init", .{});
+        try zglfw.init();
 
-        const window = c.glfwCreateWindow(width, height, title, null, null) orelse return GlfwError.WindowCreationFailed;
-        const hwnd = glfwGetWin32Window(window) orelse unreachable;
-        const hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable;
+        zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
+        zglfw.WindowHint.set(.resizable, 0);
+        const window = try zglfw.Window.create(width, height, title, null);
 
-        const surface_descriptor_from_windows = c.WGPUSurfaceDescriptorFromWindowsHWND{
-            .chain = c.WGPUChainedStruct{ .next = null, .sType = c.WGPUSType_SurfaceDescriptorFromWindowsHWND },
-            .hinstance = hinstance,
-            .hwnd = hwnd,
+        var surface_descriptor_from_windows = wgpu.SurfaceDescriptorFromWindowsHWND{
+            .chain = .{ .next = null, .struct_type = .surface_descriptor_from_windows_hwnd },
+            .hwnd = try zglfw.native.getWin32Window(window),
+            .hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable,
         };
-        var surface_descriptor = c.WGPUSurfaceDescriptor{
-            .label = null,
-            .nextInChain = @ptrCast(&surface_descriptor_from_windows),
-        };
+        var ornament_context = try ornament.Context.init(
+            allocator,
+            .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
+        );
+        ornament_context.setResolution(util.Resolution{ .width = width, .height = height });
+        try ornament_context.setScene(try @import("examples.zig").spheres(
+            ornament_context,
+            allocator,
+            @as(f32, @floatCast(width)) / @as(f32, @floatCast(height)),
+        ));
 
-        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-        var allocator = gpa.allocator();
-        return .{ .gpa = gpa, .allocator = allocator, .window = window, .ornament = try ornament.Context.init(&allocator, width, height, @ptrCast(&surface_descriptor)) };
+        return .{
+            .allocator = allocator,
+            .window = window,
+            .ornament = ornament_context,
+            .wgpu_viewport = try Viewport.init(allocator, ornament_context.wgpu_context, ornament_context.getResolution()),
+        };
     }
 
     pub fn deinit(self: *Self) void {
+        std.log.debug("[glfw_example] deinit", .{});
+        self.wgpu_viewport.deinit();
         self.ornament.deinit();
-        c.glfwDestroyWindow(self.window);
-        c.glfwTerminate();
-        const deinit_status = self.gpa.deinit();
-        if (deinit_status == .leak) {
-            //@panic("TEST FAIL")
-            std.log.err("[glfw_example] Memory leak", .{});
+        self.window.destroy();
+        zglfw.terminate();
+    }
+
+    pub fn setUpCallbacks(self: *Self) void {
+        std.log.debug("[glfw_example] setUpCallbacks", .{});
+        self.window.setUserPointer(self);
+        _ = self.window.setFramebufferSizeCallback(onFramebufferSize);
+    }
+
+    fn onFramebufferSize(window: *zglfw.Window, new_width: i32, new_height: i32) callconv(.C) void {
+        var self: *Self = window.getUserPointer(Self) orelse unreachable;
+        const new_resolution = util.Resolution{ .width = @intCast(new_width), .height = @intCast(new_height) };
+        if (!std.meta.eql(self.ornament.getResolution(), new_resolution)) {
+            std.log.debug("[glfw_example] onFramebufferSize new_width = {d}, new_height = {d}", .{ new_width, new_height });
+            self.ornament.setResolution(new_resolution);
+            self.wgpu_viewport.setResolution(new_resolution);
         }
     }
 
-    pub fn event_loop(self: Self) void {
-        while (c.glfwWindowShouldClose(self.window) == c.GLFW_FALSE) {
-            c.glfwPollEvents();
+    pub fn renderLoop(self: *Self) !void {
+        std.log.debug("[glfw_example] renderLoop", .{});
+        while (!self.window.shouldClose()) {
+            zglfw.pollEvents();
+            self.wgpu_viewport.render();
         }
     }
 };
