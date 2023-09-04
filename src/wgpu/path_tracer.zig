@@ -108,16 +108,19 @@ pub const PathTracer = struct {
         if (self.pipelines) |pipelines| pipelines.release();
     }
 
-    fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
-        return self.getOrCreateTargetBuffer().layout(binding, visibility, read_only);
+    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
+        const target = try self.getOrCreateTargetBuffer();
+        return target.layout(binding, visibility, read_only);
     }
 
-    fn targetBufferBinding(self: *Self, binding: u32) wgpu.BindGroupEntry {
-        return self.getOrCreateTargetBuffer().binding(binding);
+    pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu.BindGroupEntry {
+        const target = try self.getOrCreateTargetBuffer();
+        return target.binding(binding);
     }
 
     fn getWorkGroups(self: *Self) !u32 {
-        return self.getOrCreateTargetBuffer();
+        const target = try self.getOrCreateTargetBuffer();
+        return target.workgroups;
     }
 
     fn getOrCreateTargetBuffer(self: *Self) !*buffers.Target {
@@ -128,142 +131,146 @@ pub const PathTracer = struct {
         };
     }
 
-    fn getOrCreatePipelines(self: *Self) !*WgpuPipelines {
-        const target_buffer = try self.getOrCreateTargetBuffer();
-        const bind_groups: [4]wgpu.BindGroup = undefined;
-        const bind_group_layouts: [4]wgpu.BindGroupLayout = undefined;
-        defer for (bind_group_layouts) |bgl| bgl.release();
+    fn getOrCreatePipelines(self: *Self) !WgpuPipelines {
+        return self.pipelines orelse {
+            const target_buffer = try self.getOrCreateTargetBuffer();
+            var bind_groups: [4]wgpu.BindGroup = undefined;
+            var bind_group_layouts: [4]wgpu.BindGroupLayout = undefined;
+            defer for (bind_group_layouts) |bgl| bgl.release();
 
-        {
-            const layout_entries = [_]wgpu.BindGroupLayoutEntry{
-                target_buffer.buffer.layout(0, .{ .compute = true }, false),
-                target_buffer.accumulation_buffer.layout(1, .{ .compute = true }, false),
-                target_buffer.rng_state_buffer.layout(2, .{ .compute = true }, false),
-            };
-            const bgl = self.context.device.createBindGroupLayout(.{
-                .label = "[ornament] target bgl",
-                .entryCount = layout_entries.len,
-                .entries = &layout_entries,
+            {
+                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                    target_buffer.buffer.layout(0, .{ .compute = true }, false),
+                    target_buffer.accumulation_buffer.layout(1, .{ .compute = true }, false),
+                    target_buffer.rng_state_buffer.layout(2, .{ .compute = true }, false),
+                };
+                const bgl = self.context.device.createBindGroupLayout(.{
+                    .label = "[ornament] target bgl",
+                    .entry_count = layout_entries.len,
+                    .entries = &layout_entries,
+                });
+
+                const group_entries = [_]wgpu.BindGroupEntry{
+                    target_buffer.buffer.binding(0),
+                    target_buffer.accumulation_buffer.binding(1),
+                    target_buffer.rng_state_buffer.binding(2),
+                };
+                const bg = self.context.device.createBindGroup(.{
+                    .label = "[ornament] target bg",
+                    .layout = bgl,
+                    .entry_count = group_entries.len,
+                    .entries = &group_entries,
+                });
+                bind_group_layouts[0] = bgl;
+                bind_groups[0] = bg;
+            }
+
+            {
+                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                    self.dynamic_state_buffer.layout(0, .{ .compute = true }),
+                    self.constant_state_buffer.layout(1, .{ .compute = true }),
+                    self.camera_buffer.layout(2, .{ .compute = true }),
+                };
+                const bgl = self.context.device.createBindGroupLayout(.{
+                    .label = "[ornament] dynstate conststate camera bgl",
+                    .entry_count = layout_entries.len,
+                    .entries = &layout_entries,
+                });
+
+                const group_entries = [_]wgpu.BindGroupEntry{
+                    self.dynamic_state_buffer.binding(0),
+                    self.constant_state_buffer.binding(1),
+                    self.camera_buffer.binding(2),
+                };
+                const bg = self.context.device.createBindGroup(.{
+                    .label = "[ornament] dynstate conststate camera bg",
+                    .layout = bgl,
+                    .entry_count = group_entries.len,
+                    .entries = &group_entries,
+                });
+                bind_group_layouts[1] = bgl;
+                bind_groups[1] = bg;
+            }
+
+            {
+                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                    self.materials_buffer.layout(0, .{ .compute = true }, true),
+                    self.nodes_buffer.layout(1, .{ .compute = true }, true),
+                };
+                const bgl = self.context.device.createBindGroupLayout(.{
+                    .label = "[ornament] materials bvhnodes bgl",
+                    .entry_count = layout_entries.len,
+                    .entries = &layout_entries,
+                });
+
+                const group_entries = [_]wgpu.BindGroupEntry{
+                    self.materials_buffer.binding(0),
+                    self.nodes_buffer.binding(1),
+                };
+                const bg = self.context.device.createBindGroup(.{
+                    .label = "[ornament] materials bvhnodes bg",
+                    .layout = bgl,
+                    .entry_count = group_entries.len,
+                    .entries = &group_entries,
+                });
+                bind_group_layouts[2] = bgl;
+                bind_groups[2] = bg;
+            }
+
+            {
+                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                    self.normals_buffer.layout(0, .{ .compute = true }, true),
+                    self.normal_indices_buffer.layout(1, .{ .compute = true }, true),
+                    self.transforms_buffer.layout(2, .{ .compute = true }, true),
+                };
+                const bgl = self.context.device.createBindGroupLayout(.{
+                    .label = "[ornament] normals normal_indices transforms bgl",
+                    .entry_count = layout_entries.len,
+                    .entries = &layout_entries,
+                });
+
+                const group_entries = [_]wgpu.BindGroupEntry{
+                    self.normals_buffer.binding(0),
+                    self.normal_indices_buffer.binding(1),
+                    self.transforms_buffer.binding(2),
+                };
+                const bg = self.context.device.createBindGroup(.{
+                    .label = "[ornament] normals normal_indices transforms bg",
+                    .layout = bgl,
+                    .entry_count = group_entries.len,
+                    .entries = &group_entries,
+                });
+                bind_group_layouts[3] = bgl;
+                bind_groups[3] = bg;
+            }
+
+            const pipeline_layout = self.context.device.createPipelineLayout(.{
+                .label = "[ornament] pipeline layout",
+                .bind_group_layout_count = bind_group_layouts.len,
+                .bind_group_layouts = &bind_group_layouts,
             });
+            defer pipeline_layout.release();
 
-            const group_entries = [_]wgpu.BindGroupDescriptor{
-                target_buffer.buffer.binding(0),
-                target_buffer.accumulation_buffer.binding(1),
-                target_buffer.rng_state_buffer.binding(2),
+            const pipelines = WgpuPipelines{
+                .path_tracing_pipeline = self.context.device.createComputePipeline(.{
+                    .label = "[ornament] path tracing pipeline",
+                    .layout = pipeline_layout,
+                    .compute = .{ .module = self.shader_module, .entry_point = "main_render" },
+                }),
+                .post_processing_pipeline = self.context.device.createComputePipeline(.{
+                    .label = "[ornament] post processing pipeline",
+                    .layout = pipeline_layout,
+                    .compute = .{ .module = self.shader_module, .entry_point = "main_post_processing" },
+                }),
+                .path_tracing_and_post_processing_pipeline = self.context.device.createComputePipeline(.{
+                    .label = "[ornament] post processing pipeline",
+                    .layout = pipeline_layout,
+                    .compute = .{ .module = self.shader_module, .entry_point = "main" },
+                }),
+                .bind_groups = bind_groups,
             };
-            const bg = self.context.device.createBindGroup(.{
-                .label = "[ornament] target bg",
-                .layout = bgl,
-                .entryCount = group_entries.len,
-                .entries = &group_entries,
-            });
-            bind_group_layouts[0] = bgl;
-            bind_groups[0] = bg;
-        }
-
-        {
-            const layout_entries = [_]wgpu.BindGroupLayoutEntry{
-                self.dynamic_state_buffer.layout(0, .{ .compute = true }),
-                self.constant_state_buffer.layout(1, .{ .compute = true }),
-                self.camera_buffer.layout(2, .{ .compute = true }),
-            };
-            const bgl = self.context.device.createBindGroupLayout(.{
-                .label = "[ornament] dynstate conststate camera bgl",
-                .entryCount = layout_entries.len,
-                .entries = &layout_entries,
-            });
-
-            const group_entries = [_]wgpu.BindGroupDescriptor{
-                self.dynamic_state_buffer.binding(0),
-                self.constant_state_buffer.binding(1),
-                self.camera_buffer.binding(2),
-            };
-            const bg = self.context.device.createBindGroup(.{
-                .label = "[ornament] dynstate conststate camera bg",
-                .layout = bgl,
-                .entryCount = group_entries.len,
-                .entries = &group_entries,
-            });
-            bind_group_layouts[1] = bgl;
-            bind_groups[1] = bg;
-        }
-
-        {
-            const layout_entries = [_]wgpu.BindGroupLayoutEntry{
-                self.materials_buffer.layout(0, .{ .compute = true }, true),
-                self.nodes_buffer.layout(1, .{ .compute = true }, true),
-            };
-            const bgl = self.context.device.createBindGroupLayout(.{
-                .label = "[ornament] materials bvhnodes bgl",
-                .entryCount = layout_entries.len,
-                .entries = &layout_entries,
-            });
-
-            const group_entries = [_]wgpu.BindGroupDescriptor{
-                self.materials_buffer.binding(0),
-                self.nodes_buffer.binding(1),
-            };
-            const bg = self.context.device.createBindGroup(.{
-                .label = "[ornament] materials bvhnodes bg",
-                .layout = bgl,
-                .entryCount = group_entries.len,
-                .entries = &group_entries,
-            });
-            bind_group_layouts[2] = bgl;
-            bind_groups[2] = bg;
-        }
-
-        {
-            const layout_entries = [_]wgpu.BindGroupLayoutEntry{
-                self.normals_buffer.layout(0, .{ .compute = true }),
-                self.normal_indices_buffer.layout(1, .{ .compute = true }),
-                self.transforms_buffer.layout(2, .{ .compute = true }),
-            };
-            const bgl = self.context.device.createBindGroupLayout(.{
-                .label = "[ornament] normals normal_indices transforms bgl",
-                .entryCount = layout_entries.len,
-                .entries = &layout_entries,
-            });
-
-            const group_entries = [_]wgpu.BindGroupDescriptor{
-                self.normals_buffer.binding(0),
-                self.normal_indices_buffer.binding(1),
-                self.transforms_buffer.binding(2),
-            };
-            const bg = self.context.device.createBindGroup(.{
-                .label = "[ornament] normals normal_indices transforms bg",
-                .layout = bgl,
-                .entryCount = group_entries.len,
-                .entries = &group_entries,
-            });
-            bind_group_layouts[3] = bgl;
-            bind_groups[3] = bg;
-        }
-
-        const pipeline_layout = self.context.device.createPipelineLayout(.{
-            .label = "[ornament] pipeline layout",
-            .bindGroupLayoutCount = bind_group_layouts.len,
-            .bindGroupLayouts = bind_group_layouts,
-        });
-        defer pipeline_layout.release();
-
-        return .{
-            .path_tracing_pipeline = self.context.device.createComputePipeline(.{
-                .label = "[ornament] path tracing pipeline",
-                .layout = pipeline_layout,
-                .compute = .{ .module = self.shader_module, .entryPoint = "main_render" },
-            }),
-            .post_processing_pipeline = self.context.device.createComputePipeline(.{
-                .label = "[ornament] post processing pipeline",
-                .layout = pipeline_layout,
-                .compute = .{ .module = self.shader_module, .entryPoint = "main_post_processing" },
-            }),
-            .path_tracing_and_post_processing_pipeline = self.context.device.createComputePipeline(.{
-                .label = "[ornament] post processing pipeline",
-                .layout = pipeline_layout,
-                .compute = .{ .module = self.shader_module, .entryPoint = "main_post_processing" },
-            }),
-            .bind_groups = bind_groups,
+            self.pipelines = pipelines;
+            return pipelines;
         };
     }
 
@@ -288,61 +295,52 @@ pub const PathTracer = struct {
         if (scene.camera.dirty) {
             dirty = true;
             scene.camera.dirty = false;
-            self.camera_buffer.write(
-                self.context.queue,
-                buffers.WriteData.init(wgsl_structs.Camera, &[_]wgsl_structs.Camera{wgsl_structs.Camera.from(&scene.camera)}),
-            );
+            self.camera_buffer.write(self.context.queue, wgsl_structs.Camera.from(&scene.camera));
         }
 
         if (state.dirty) {
             dirty = true;
             state.dirty = false;
-            self.constant_state_buffer.write(
-                self.context.queue,
-                buffers.WriteData.init(wgsl_structs.Camera, &[_]wgsl_structs.Camera{wgsl_structs.Camera.from(&scene.camera)}),
-            );
+            self.constant_state_buffer.write(self.context.queue, wgsl_structs.ConstantState.from(state));
         }
 
         if (dirty) self.reset();
         self.dynamic_state.nextIteration();
-        self.dynamic_state_buffer.write(
-            self.context.queue,
-            buffers.WriteData.init(wgsl_structs.ConstantState, &[_]wgsl_structs.ConstantState{wgsl_structs.ConstantState.from(state)}),
-        );
+        self.dynamic_state_buffer.write(self.context.queue, self.dynamic_state);
     }
 
-    fn runPipeline(self: *Self, pipeline: wgpu.ComputePipeline, bind_groups: [4]wgpu.BindGroup, comptime pipeline_name: []const u8) void {
-        const encoder = self.context.device.createCommandEncoder(.{ .label = "[ornament]" ++ pipeline_name ++ "command encoder" });
+    fn runPipeline(self: *Self, pipeline: wgpu.ComputePipeline, bind_groups: [4]wgpu.BindGroup, comptime pipeline_name: []const u8) !void {
+        const encoder = self.context.device.createCommandEncoder(.{ .label = "[ornament] " ++ pipeline_name ++ "command encoder" });
         defer encoder.release();
 
-        const pass = encoder.beginComputePass(.{ .label = "[ornament]" ++ pipeline_name ++ " compute pass" });
+        const pass = encoder.beginComputePass(.{ .label = "[ornament] " ++ pipeline_name ++ " compute pass", .timestamp_write_count = 0, .timestamp_writes = null });
         pass.setPipeline(pipeline);
         inline for (bind_groups, 0..) |bg, i| {
-            pass.setBindGroup(i, &bg, 0, null);
+            pass.setBindGroup(i, bg, null);
         }
         pass.dispatchWorkgroups(try self.getWorkGroups(), 1, 1);
         pass.end();
 
-        const command = encoder.finish(.{ .label = "[ornament]" ++ pipeline_name ++ " command buffer" });
+        const command = encoder.finish(.{ .label = "[ornament] " ++ pipeline_name ++ " command buffer" });
         defer command.release();
 
-        self.context.queue.submit(1, &command);
+        self.context.queue.submit(&[_]wgpu.CommandBuffer{command});
         self.context.device.tick();
     }
 
     pub fn render(self: *Self) !void {
         const pipelines = try self.getOrCreatePipelines();
-        self.runPipeline(pipelines.path_tracing_pipeline, pipelines.bind_groups, "path tracing");
+        return self.runPipeline(pipelines.path_tracing_pipeline, pipelines.bind_groups, "path tracing");
     }
 
     pub fn post_processing(self: *Self) !void {
         const pipelines = try self.getOrCreatePipelines();
-        self.runPipeline(pipelines.post_processing_pipeline, pipelines.bind_groups, "post processing");
+        return self.runPipeline(pipelines.post_processing_pipeline, pipelines.bind_groups, "post processing");
     }
 
     pub fn render_and_apply_post_processing(self: *Self) !void {
         const pipelines = try self.getOrCreatePipelines();
-        self.runPipeline(pipelines.path_tracing_and_post_processing_pipeline, pipelines.bind_groups, "path tracing and post processing");
+        return self.runPipeline(pipelines.path_tracing_and_post_processing_pipeline, pipelines.bind_groups, "path tracing and post processing");
     }
 };
 

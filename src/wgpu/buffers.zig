@@ -19,12 +19,12 @@ pub const Target = struct {
 
     pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, resolution: util.Resolution) !*Self {
         const pixels_count = resolution.width * resolution.height;
-        const buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, true, .{ .size = pixels_count });
-        const accumulation_buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, false, .{ .size = pixels_count });
+        const buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, true, .{ .element_count = pixels_count });
+        const accumulation_buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, false, .{ .element_count = pixels_count });
 
         const rng_seed = try allocator.alloc(u32, pixels_count);
         defer allocator.free(rng_seed);
-        const rng_state_buffer = try Storage(u32).init(allocator, context, false, rng_seed);
+        const rng_state_buffer = try Storage(u32).init(allocator, context, false, .{ .data = rng_seed });
 
         var self = try allocator.create(Self);
         self.* = .{
@@ -66,27 +66,32 @@ pub fn Storage(comptime T: type) type {
         const Self = @This();
         allocator: std.mem.Allocator,
         handle: wgpu.Buffer,
+        padded_size_in_bytes: u64,
 
-        pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, copy_src: bool, init_data: union(enum) { size: u64, data: []const T }) !*Self {
+        pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, copy_src: bool, init_data: union(enum) { element_count: u64, data: []const T }) !*Self {
             var usage = wgpu.BufferUsage{ .storage = true };
             if (copy_src) {
                 usage.copy_src = true;
             }
 
             const label = "[ornament] []" ++ @typeName(T) ++ " storage";
+            const padded_size_in_bytes = switch (init_data) {
+                .element_count => |count| paddedBufferSize(count * @sizeOf(T)),
+                .data => |data| paddedBufferSize(data.len * @sizeOf(T)),
+            };
+
             const handle = switch (init_data) {
-                .size => |unpadded_size| context.device.createBuffer(.{
+                .element_count => context.device.createBuffer(.{
                     .label = label,
                     .usage = usage,
-                    .size = paddedBufferSize(unpadded_size * @sizeOf(T)),
+                    .size = padded_size_in_bytes,
                 }),
                 .data => |data| blk: {
-                    const unpadded_size = @as(u64, @intCast(data.len)) * @sizeOf(T);
                     const handle = context.device.createBuffer(.{
                         .label = label,
                         .usage = usage,
                         .mapped_at_creation = true,
-                        .size = paddedBufferSize(unpadded_size),
+                        .size = padded_size_in_bytes,
                     });
 
                     var dst = handle.getMappedRange(T, 0, data.len) orelse unreachable;
@@ -98,7 +103,7 @@ pub fn Storage(comptime T: type) type {
             };
 
             var self = try allocator.create(Self);
-            self.* = .{ .allocator = allocator, .handle = handle };
+            self.* = .{ .allocator = allocator, .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
             return self;
         }
 
@@ -107,16 +112,17 @@ pub fn Storage(comptime T: type) type {
             self.handle.release();
         }
 
-        pub fn layout(binding_id: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
+        pub fn layout(self: *const Self, binding_id: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
+            _ = self;
             return .{
                 .binding = binding_id,
                 .visibility = visibility,
-                .buffer = .{ .type = if (read_only) .ReadOnlyStorage else .Storage },
+                .buffer = .{ .binding_type = if (read_only) .read_only_storage else .storage },
             };
         }
 
         pub fn binding(self: *const Self, binding_id: u32) wgpu.BindGroupEntry {
-            return .{ .binding = binding_id, .buffer = self.handle };
+            return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
         }
     };
 }
@@ -126,6 +132,7 @@ pub fn Uniform(comptime T: type) type {
         const Self = @This();
         allocator: std.mem.Allocator,
         handle: wgpu.Buffer,
+        padded_size_in_bytes: u64,
 
         pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, read_only: bool, data: T) !*Self {
             var usage = wgpu.BufferUsage{ .uniform = true };
@@ -133,18 +140,19 @@ pub fn Uniform(comptime T: type) type {
                 usage.copy_dst = true;
             }
 
+            const padded_size_in_bytes = paddedBufferSize(@sizeOf(T));
             const handle = context.device.createBuffer(.{
                 .label = "[ornament] " ++ @typeName(T) ++ " uniform",
                 .usage = usage,
                 .mapped_at_creation = true,
-                .size = paddedBufferSize(@sizeOf(T)),
+                .size = padded_size_in_bytes,
             });
             var dst = handle.getMappedRange(T, 0, 1) orelse unreachable;
             std.mem.copy(T, dst, &[_]T{data});
             handle.unmap();
 
             var self = try allocator.create(Self);
-            self.* = .{ .allocator = allocator, .handle = handle };
+            self.* = .{ .allocator = allocator, .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
             return self;
         }
 
@@ -153,16 +161,17 @@ pub fn Uniform(comptime T: type) type {
             self.handle.release();
         }
 
-        pub fn layout(binding_id: u32, visibility: wgpu.ShaderStage) wgpu.BindGroupLayoutEntry {
-            return .{ .binding = binding_id, .visibility = visibility, .buffer = .{ .type = .uniform } };
+        pub fn layout(self: *const Self, binding_id: u32, visibility: wgpu.ShaderStage) wgpu.BindGroupLayoutEntry {
+            _ = self;
+            return .{ .binding = binding_id, .visibility = visibility, .buffer = .{ .binding_type = .uniform } };
         }
 
         pub fn binding(self: *const Self, binding_id: u32) wgpu.BindGroupEntry {
-            return .{ .binding = binding_id, .buffer = self.handle };
+            return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
         }
 
         pub fn write(self: *const Self, queue: wgpu.Queue, data: T) void {
-            queue.writeBuffer(self.handle, 0, T, [_]T{data});
+            queue.writeBuffer(self.handle, 0, T, &[_]T{data});
         }
     };
 }

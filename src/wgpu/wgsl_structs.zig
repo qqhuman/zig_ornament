@@ -2,6 +2,7 @@ const zmath = @import("zmath");
 const ornament = @import("../ornament.zig");
 
 pub const TARGET_PIXEL_COMPONENTS: u32 = 4;
+pub const Resolution = [2]u32;
 pub const Point3 = [3]f32;
 pub const Vector3 = [3]f32;
 pub const Vector4 = [TARGET_PIXEL_COMPONENTS]f32;
@@ -64,7 +65,7 @@ pub const DynamicState = extern struct {
     current_iteration: f32 = 0.0,
 
     pub fn nextIteration(self: *Self) void {
-        self.current_iteration + 1.0;
+        self.current_iteration += 1.0;
     }
 
     pub fn reset(self: *Self) void {
@@ -75,17 +76,17 @@ pub const DynamicState = extern struct {
 pub const Camera = extern struct {
     const Self = @This();
     origin: Point3,
-    _padding1: [1]u32 = undefined,
+    _padding1: u32 = undefined,
     lower_left_corner: Point3,
-    _padding2: [1]u32 = undefined,
+    _padding2: u32 = undefined,
     horizontal: Vector3,
-    _padding3: [1]u32 = undefined,
+    _padding3: u32 = undefined,
     vertical: Vector3,
-    _padding4: [1]u32 = undefined,
+    _padding4: u32 = undefined,
     u: Vector3,
-    _padding5: [1]u32 = undefined,
+    _padding5: u32 = undefined,
     v: Vector3,
-    _padding6: [1]u32 = undefined,
+    _padding6: u32 = undefined,
     w: Vector3,
     lens_radius: f32,
 

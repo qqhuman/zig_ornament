@@ -1,27 +1,32 @@
 const std = @import("std");
 const wgpu = @import("zgpu").wgpu;
 const util = @import("../util.zig");
+const ornament = @import("../ornament.zig");
+const buffers = @import("buffers.zig");
+const wgsl_structs = @import("wgsl_structs.zig");
 const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 
 pub const Viewport = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
-    context: *const WgpuContext,
+    context: *ornament.Context,
     swap_chain: ?wgpu.SwapChain,
-    pipeline: ?wgpu.RenderPipeline,
+    pipeline: ?WgpuRenderPipeline,
     shader_module: wgpu.ShaderModule,
     resolution: util.Resolution,
+    dimensions_buffer: *buffers.Uniform(wgsl_structs.Resolution),
 
-    pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, resolution: util.Resolution) !*Self {
+    pub fn init(allocator: std.mem.Allocator, context: *ornament.Context) !*Self {
         var wgsl_descriptor = wgpu.ShaderModuleWgslDescriptor{
             .code = @embedFile("shaders/viewport.wgsl"),
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
-        const shader_module = context.device.createShaderModule(.{
+        const shader_module = context.wgpu_context.device.createShaderModule(.{
             .next_in_chain = @ptrCast(&wgsl_descriptor),
             .label = "[ornament] wgpu viewport shader module",
         });
 
+        var resolution = context.getResolution();
         var self = try allocator.create(Self);
         self.* = .{
             .allocator = allocator,
@@ -30,6 +35,12 @@ pub const Viewport = struct {
             .shader_module = shader_module,
             .pipeline = null,
             .resolution = resolution,
+            .dimensions_buffer = try buffers.Uniform(wgsl_structs.Resolution).init(
+                allocator,
+                context.wgpu_context,
+                false,
+                [2]u32{ resolution.width, resolution.height },
+            ),
         };
         return self;
     }
@@ -39,14 +50,16 @@ pub const Viewport = struct {
         if (self.pipeline) |pipeline| {
             pipeline.release();
         }
-        self.shader_module.release();
         if (self.swap_chain) |swap_chain| {
             swap_chain.release();
         }
+        self.shader_module.release();
+        self.dimensions_buffer.deinit();
     }
 
     pub fn setResolution(self: *Self, resolution: util.Resolution) void {
         self.resolution = resolution;
+        self.dimensions_buffer.write(self.context.wgpu_context.queue, [2]u32{ resolution.width, resolution.height });
         if (self.swap_chain) |swap_chain| {
             swap_chain.release();
             self.swap_chain = null;
@@ -58,8 +71,8 @@ pub const Viewport = struct {
     }
 
     fn createSwapChain(self: *const Self) wgpu.SwapChain {
-        const surface = self.context.surface orelse @panic("WGPUSurface is empty.");
-        return self.context.device.createSwapChain(surface, .{
+        const surface = self.context.wgpu_context.surface orelse @panic("WGPUSurface is empty.");
+        return self.context.wgpu_context.device.createSwapChain(surface, .{
             .label = "[ornament] wgpu viewport swap chain",
             .width = self.resolution.width,
             .height = self.resolution.height,
@@ -69,7 +82,7 @@ pub const Viewport = struct {
         });
     }
 
-    fn createPipeline(self: *Self) wgpu.RenderPipeline {
+    fn createPipeline(self: *Self) !WgpuRenderPipeline {
         var targets = [_]wgpu.ColorTargetState{.{
             .format = .bgra8_unorm,
             .blend = &.{
@@ -78,36 +91,71 @@ pub const Viewport = struct {
             },
             .write_mask = wgpu.ColorWriteMask.all,
         }};
-        return self.context.device.createRenderPipeline(.{
-            .label = "[ornament] wgpu viewport render pipeline",
-            .vertex = .{ .entry_point = "vs_main", .module = self.shader_module },
-            .fragment = &.{
-                .target_count = targets.len,
-                .targets = &targets,
-                .entry_point = "fs_main",
-                .module = self.shader_module,
-            },
-            .primitive = .{
-                .topology = .triangle_list,
-                .front_face = .ccw,
-                .cull_mode = .back,
-            },
+
+        const bind_group_layout_entries = [_]wgpu.BindGroupLayoutEntry{
+            try self.context.targetBufferLayout(0, .{ .fragment = true }, true),
+            self.dimensions_buffer.layout(1, .{ .fragment = true }),
+        };
+        const bind_group_layout = self.context.wgpu_context.device.createBindGroupLayout(.{
+            .label = "[ornament] wgpu viewport render bgl",
+            .entry_count = bind_group_layout_entries.len,
+            .entries = &bind_group_layout_entries,
         });
+        defer bind_group_layout.release();
+
+        const bind_group_entries = [_]wgpu.BindGroupEntry{
+            try self.context.targetBufferBinding(0),
+            self.dimensions_buffer.binding(1),
+        };
+        const bind_group = self.context.wgpu_context.device.createBindGroup(.{
+            .label = "[ornament] wgpu viewport render bl",
+            .layout = bind_group_layout,
+            .entry_count = bind_group_entries.len,
+            .entries = &bind_group_entries,
+        });
+
+        const bind_group_layouts = [_]wgpu.BindGroupLayout{bind_group_layout};
+        const pipeline_layout = self.context.wgpu_context.device.createPipelineLayout(.{
+            .label = "[ornament] wgpu viewport render pl",
+            .bind_group_layout_count = bind_group_layouts.len,
+            .bind_group_layouts = &bind_group_layouts,
+        });
+        defer pipeline_layout.release();
+
+        return .{
+            .bind_group = bind_group,
+            .render_pipeline = self.context.wgpu_context.device.createRenderPipeline(.{
+                .label = "[ornament] wgpu viewport render pipeline",
+                .layout = pipeline_layout,
+                .vertex = .{ .entry_point = "vs_main", .module = self.shader_module },
+                .fragment = &.{
+                    .target_count = targets.len,
+                    .targets = &targets,
+                    .entry_point = "fs_main",
+                    .module = self.shader_module,
+                },
+                .primitive = .{
+                    .topology = .triangle_list,
+                    .front_face = .ccw,
+                    .cull_mode = .back,
+                },
+            }),
+        };
     }
 
-    pub fn render(self: *Self) void {
+    pub fn render(self: *Self) !void {
         const swap_chain = self.swap_chain orelse blk: {
             const swap_chain = self.createSwapChain();
             self.swap_chain = swap_chain;
             break :blk swap_chain;
         };
         const pipeline = self.pipeline orelse blk: {
-            const pipeline = self.createPipeline();
+            const pipeline = try self.createPipeline();
             self.pipeline = pipeline;
             break :blk pipeline;
         };
         const next_texture = swap_chain.getCurrentTextureView();
-        const commnad_encoder = self.context.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
+        const commnad_encoder = self.context.wgpu_context.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
         defer commnad_encoder.release();
 
         const color_attachments = [_]wgpu.RenderPassColorAttachment{.{
@@ -121,14 +169,26 @@ pub const Viewport = struct {
             .color_attachment_count = color_attachments.len,
             .color_attachments = &color_attachments,
         });
-        render_pass.setPipeline(pipeline);
+        render_pass.setPipeline(pipeline.render_pipeline);
+        render_pass.setBindGroup(0, pipeline.bind_group, null);
         render_pass.draw(3, 1, 0, 0);
         render_pass.end();
         next_texture.release();
         const command = commnad_encoder.finish(.{ .label = "[ornament] wgpu viewport command buffer" });
         defer command.release();
         const commands = [_]wgpu.CommandBuffer{command};
-        self.context.queue.submit(&commands);
+        self.context.wgpu_context.queue.submit(&commands);
         swap_chain.present();
+    }
+};
+
+const WgpuRenderPipeline = struct {
+    const Self = @This();
+    bind_group: wgpu.BindGroup,
+    render_pipeline: wgpu.RenderPipeline,
+
+    pub fn release(self: Self) void {
+        self.render_pipeline.release();
+        self.bind_group.reference();
     }
 };

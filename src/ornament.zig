@@ -23,7 +23,7 @@ pub const Context = struct {
     spheres: std.ArrayList(*Sphere),
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
-    wgpu_path_tracer: ?*PathTracer,
+    path_tracer: ?*PathTracer,
     wgpu_context: *WgpuContext,
 
     pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu.SurfaceDescriptor) !*Self {
@@ -37,7 +37,7 @@ pub const Context = struct {
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
             .wgpu_context = try WgpuContext.init(allocator, surface_descriptor),
-            .wgpu_path_tracer = null,
+            .path_tracer = null,
         };
         return self;
     }
@@ -47,7 +47,7 @@ pub const Context = struct {
         if (self.scene) |scene| {
             scene.deinit();
         }
-        if (self.wgpu_path_tracer) |path_tracer| {
+        if (self.path_tracer) |path_tracer| {
             path_tracer.deinit();
         }
         self.destroyElements(&self.spheres);
@@ -63,7 +63,7 @@ pub const Context = struct {
 
     pub fn setScene(self: *Self, scene: *Scene) !void {
         self.scene = scene;
-        self.wgpu_path_tracer = try PathTracer.init(
+        self.path_tracer = try PathTracer.init(
             self.allocator,
             self.wgpu_context,
             &self.state,
@@ -117,6 +117,32 @@ pub const Context = struct {
 
     pub fn getRayCastEpsilon(self: Self) f32 {
         return self.state.getRayCastEpsilon();
+    }
+
+    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
+        var path_tracer = self.path_tracer orelse unreachable;
+        return path_tracer.targetBufferLayout(binding, visibility, read_only);
+    }
+
+    pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu.BindGroupEntry {
+        var path_tracer = self.path_tracer orelse unreachable;
+        return path_tracer.targetBufferBinding(binding);
+    }
+
+    pub fn render(self: *Self) !void {
+        var scene = self.scene orelse unreachable;
+        var path_tracer = self.path_tracer orelse unreachable;
+        if (self.state.iterations > 1) {
+            var i: u32 = 0;
+            while (i < self.state.iterations) : (i += 1) {
+                path_tracer.update(&self.state, scene);
+                try path_tracer.render();
+            }
+            try path_tracer.post_processing();
+        } else {
+            path_tracer.update(&self.state, scene);
+            try path_tracer.render_and_apply_post_processing();
+        }
     }
 
     pub fn lambertian(self: *Self, albedo: zmath.Vec) std.mem.Allocator.Error!*Material {

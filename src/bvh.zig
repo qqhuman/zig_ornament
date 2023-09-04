@@ -146,7 +146,7 @@ fn calculateBoundingBox(leafs: []Leaf) Aabb {
             .mesh_instance => |mi| mi.aabb,
         };
         min = zmath.min(min, aabb.min);
-        max = zmath.min(max, aabb.max);
+        max = zmath.max(max, aabb.max);
     }
     return Aabb.init(min, max);
 }
@@ -171,9 +171,8 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
             },
             .sphere => |s| {
                 const transform = s.transform;
-                const inverse_transform = zmath.inverse(transform);
-                try bvh.transforms.append(inverse_transform);
-                try bvh.transforms.append(transform);
+                try appendTransform(bvh, zmath.inverse(transform));
+                try appendTransform(bvh, transform);
                 const transform_id = bvh.transforms.items.len / 2 - 1;
                 return .{
                     .left_aabb_min_or_v0 = zmath.vecToArr3(s.aabb.min),
@@ -195,9 +194,8 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
                 m.bvh_id = mesh_top_id;
 
                 const transform = m.transform;
-                const inverse_transform = zmath.inverse(transform);
-                try bvh.transforms.append(inverse_transform);
-                try bvh.transforms.append(transform);
+                try appendTransform(bvh, zmath.inverse(transform));
+                try appendTransform(bvh, transform);
                 const transform_id = bvh.transforms.items.len / 2 - 1;
                 return .{
                     .left_aabb_min_or_v0 = zmath.vecToArr3(m.aabb.min),
@@ -221,9 +219,8 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
                     }
                 };
                 const transform = mi.transform;
-                const inverse_transform = zmath.inverse(transform);
-                try bvh.transforms.append(inverse_transform);
-                try bvh.transforms.append(transform);
+                try appendTransform(bvh, zmath.inverse(transform));
+                try appendTransform(bvh, transform);
                 const transform_id = bvh.transforms.items.len / 2 - 1;
                 return .{
                     .left_aabb_min_or_v0 = zmath.vecToArr3(mi.aabb.min),
@@ -252,12 +249,12 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
         // Recursively build BVH for left and right subsets
         const left = try buildBvhRecursive(allocator, bvh, left_leafs, isntances_to_resolve);
         try bvh.nodes.append(left);
-        const left_id = bvh.nodes.items.len;
+        const left_id = bvh.nodes.items.len - 1;
         const left_aabb = calculateBoundingBox(left_leafs);
 
         const right = try buildBvhRecursive(allocator, bvh, right_leafs, isntances_to_resolve);
         try bvh.nodes.append(right);
-        const right_id = bvh.nodes.items.len;
+        const right_id = bvh.nodes.items.len - 1;
         const right_aabb = calculateBoundingBox(right_leafs);
 
         return .{
@@ -272,6 +269,10 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
             .transform_id = undefined,
         };
     }
+}
+
+fn appendTransform(bvh: *Bvh, transform: zmath.Mat) !void {
+    try bvh.transforms.append(transform);
 }
 
 fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_resolve: *std.AutoHashMap(u32, *const MeshInstance)) std.mem.Allocator.Error!wgsl_structs.Node {
