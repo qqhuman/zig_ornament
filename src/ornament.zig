@@ -18,7 +18,7 @@ pub const Context = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     state: State,
-    scene: ?*Scene,
+    scene: *Scene,
     materials: std.ArrayList(*Material),
     spheres: std.ArrayList(*Sphere),
     meshes: std.ArrayList(*Mesh),
@@ -31,7 +31,7 @@ pub const Context = struct {
         self.* = .{
             .allocator = allocator,
             .state = State.init(),
-            .scene = null,
+            .scene = try Scene.init(allocator),
             .materials = std.ArrayList(*Material).init(allocator),
             .spheres = std.ArrayList(*Sphere).init(allocator),
             .meshes = std.ArrayList(*Mesh).init(allocator),
@@ -44,12 +44,8 @@ pub const Context = struct {
 
     pub fn deinit(self: *Self) void {
         defer self.allocator.destroy(self);
-        if (self.scene) |scene| {
-            scene.deinit();
-        }
-        if (self.path_tracer) |path_tracer| {
-            path_tracer.deinit();
-        }
+        self.scene.deinit();
+        if (self.path_tracer) |pt| pt.deinit();
         self.destroyElements(&self.spheres);
         self.spheres.deinit();
         self.destroyElements(&self.meshes);
@@ -59,16 +55,6 @@ pub const Context = struct {
         self.destroyElements(&self.materials);
         self.materials.deinit();
         self.wgpu_context.deinit();
-    }
-
-    pub fn setScene(self: *Self, scene: *Scene) !void {
-        self.scene = scene;
-        self.path_tracer = try PathTracer.init(
-            self.allocator,
-            self.wgpu_context,
-            &self.state,
-            scene,
-        );
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -103,8 +89,10 @@ pub const Context = struct {
         return self.state.getIterations();
     }
 
-    pub fn setResolution(self: *Self, resolution: util.Resolution) void {
+    pub fn setResolution(self: *Self, resolution: util.Resolution) !void {
         self.state.setResolution(resolution);
+        var pt = try self.getOrCreatePathTracer();
+        pt.setResolution(resolution);
     }
 
     pub fn getResolution(self: Self) util.Resolution {
@@ -119,28 +107,36 @@ pub const Context = struct {
         return self.state.getRayCastEpsilon();
     }
 
+    fn getOrCreatePathTracer(self: *Self) !*PathTracer {
+        return self.path_tracer orelse blk: {
+            var pt = try PathTracer.init(self.allocator, self.wgpu_context, &self.state, self.scene);
+            self.path_tracer = pt;
+            std.log.debug("[ornament] path tracer was created", .{});
+            break :blk pt;
+        };
+    }
+
     pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
-        var path_tracer = self.path_tracer orelse unreachable;
+        var path_tracer = try self.getOrCreatePathTracer();
         return path_tracer.targetBufferLayout(binding, visibility, read_only);
     }
 
     pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu.BindGroupEntry {
-        var path_tracer = self.path_tracer orelse unreachable;
+        var path_tracer = try self.getOrCreatePathTracer();
         return path_tracer.targetBufferBinding(binding);
     }
 
     pub fn render(self: *Self) !void {
-        var scene = self.scene orelse unreachable;
-        var path_tracer = self.path_tracer orelse unreachable;
+        var path_tracer = try self.getOrCreatePathTracer();
         if (self.state.iterations > 1) {
             var i: u32 = 0;
             while (i < self.state.iterations) : (i += 1) {
-                path_tracer.update(&self.state, scene);
+                path_tracer.update(&self.state, self.scene);
                 try path_tracer.render();
             }
             try path_tracer.post_processing();
         } else {
-            path_tracer.update(&self.state, scene);
+            path_tracer.update(&self.state, self.scene);
             try path_tracer.render_and_apply_post_processing();
         }
     }

@@ -26,8 +26,6 @@ pub fn build(b: *std.Build) void {
     zgpu_pkg.link(exe);
     zglfw_pkg.link(exe);
 
-    exe.linkLibC();
-
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

@@ -63,7 +63,7 @@ pub const PathTracer = struct {
         };
         const shader_module = context.device.createShaderModule(.{
             .next_in_chain = @ptrCast(&wgsl_descriptor),
-            .label = "[ornament] wgpu viewport shader module",
+            .label = "[ornament] path tracer shader module",
         });
 
         var self = try allocator.create(Self);
@@ -127,6 +127,7 @@ pub const PathTracer = struct {
         return self.target_buffer orelse {
             var tb = try buffers.Target.init(self.allocator, self.context, self.resolution);
             self.target_buffer = tb;
+            std.log.debug("[ornament] target buffer was created", .{});
             return tb;
         };
     }
@@ -270,6 +271,7 @@ pub const PathTracer = struct {
                 .bind_groups = bind_groups,
             };
             self.pipelines = pipelines;
+            std.log.debug("[ornament] pipelines were created", .{});
             return pipelines;
         };
     }
@@ -313,13 +315,17 @@ pub const PathTracer = struct {
         const encoder = self.context.device.createCommandEncoder(.{ .label = "[ornament] " ++ pipeline_name ++ "command encoder" });
         defer encoder.release();
 
-        const pass = encoder.beginComputePass(.{ .label = "[ornament] " ++ pipeline_name ++ " compute pass", .timestamp_write_count = 0, .timestamp_writes = null });
-        pass.setPipeline(pipeline);
-        inline for (bind_groups, 0..) |bg, i| {
-            pass.setBindGroup(i, bg, null);
+        {
+            const pass = encoder.beginComputePass(.{ .label = "[ornament] " ++ pipeline_name ++ " compute pass", .timestamp_write_count = 0, .timestamp_writes = null });
+            defer pass.release();
+            defer pass.end();
+
+            pass.setPipeline(pipeline);
+            inline for (bind_groups, 0..) |bg, i| {
+                pass.setBindGroup(i, bg, null);
+            }
+            pass.dispatchWorkgroups(try self.getWorkGroups(), 1, 1);
         }
-        pass.dispatchWorkgroups(try self.getWorkGroups(), 1, 1);
-        pass.end();
 
         const command = encoder.finish(.{ .label = "[ornament] " ++ pipeline_name ++ " command buffer" });
         defer command.release();

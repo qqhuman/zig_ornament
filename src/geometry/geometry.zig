@@ -1,4 +1,5 @@
 const std = @import("std");
+const zmath = @import("zmath");
 pub const Camera = @import("camera.zig").Camera;
 pub const Sphere = @import("sphere.zig").Sphere;
 pub const Mesh = @import("mesh.zig").Mesh;
@@ -13,11 +14,19 @@ pub const Scene = struct {
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
 
-    pub fn init(allocator: std.mem.Allocator, camera: Camera) std.mem.Allocator.Error!*Self {
+    pub fn init(allocator: std.mem.Allocator) std.mem.Allocator.Error!*Self {
         var self = try allocator.create(Self);
         self.* = .{
             .allocator = allocator,
-            .camera = camera,
+            .camera = Camera.init(
+                zmath.f32x4(1.0, 1.0, 1.0, 1.0),
+                zmath.f32x4(0.0, 0.0, 0.0, 1.0),
+                zmath.f32x4(0.0, 1.0, 0.0, 0.0),
+                1.0,
+                40.0,
+                0.0,
+                10.0,
+            ),
             .spheres = std.ArrayList(*Sphere).init(allocator),
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),

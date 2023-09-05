@@ -26,14 +26,13 @@ const App = struct {
     allocator: std.mem.Allocator,
     window: *zglfw.Window,
     ornament: *ornament.Context,
-    wgpu_viewport: *Viewport,
+    viewport: *Viewport,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_example] init", .{});
         try zglfw.init();
 
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
-        zglfw.WindowHint.set(.resizable, 0);
         const window = try zglfw.Window.create(WIDTH, HEIGHT, TITLE, null);
 
         var surface_descriptor_from_windows = wgpu.SurfaceDescriptorFromWindowsHWND{
@@ -45,28 +44,24 @@ const App = struct {
             allocator,
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
+        try @import("examples.zig").init_spheres(ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
         ornament_context.setFlipY(true);
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
-        ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
+        try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
         ornament_context.setGamma(2.2);
-        try ornament_context.setScene(try @import("examples.zig").spheres(
-            ornament_context,
-            allocator,
-            @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)),
-        ));
 
         return .{
             .allocator = allocator,
             .window = window,
             .ornament = ornament_context,
-            .wgpu_viewport = try Viewport.init(allocator, ornament_context),
+            .viewport = try Viewport.init(allocator, ornament_context),
         };
     }
 
     pub fn deinit(self: *Self) void {
         std.log.debug("[glfw_example] deinit", .{});
-        self.wgpu_viewport.deinit();
+        self.viewport.deinit();
         self.ornament.deinit();
         self.window.destroy();
         zglfw.terminate();
@@ -83,17 +78,20 @@ const App = struct {
         const new_resolution = util.Resolution{ .width = @intCast(width), .height = @intCast(height) };
         if (!std.meta.eql(self.ornament.getResolution(), new_resolution)) {
             std.log.debug("[glfw_example] onFramebufferSize width = {d}, height = {d}", .{ width, height });
-            self.ornament.setResolution(new_resolution);
-            self.wgpu_viewport.setResolution(new_resolution);
+            self.ornament.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
+            self.ornament.setResolution(new_resolution) catch unreachable;
+            self.viewport.setResolution(new_resolution);
         }
     }
 
     pub fn renderLoop(self: *Self) !void {
         std.log.debug("[glfw_example] renderLoop", .{});
+        var fps_counter = util.FpsCounter.init();
         while (!self.window.shouldClose()) {
             zglfw.pollEvents();
             try self.ornament.render();
-            try self.wgpu_viewport.render();
+            try self.viewport.render();
+            fps_counter.endFrames(ITERATIONS);
         }
     }
 };

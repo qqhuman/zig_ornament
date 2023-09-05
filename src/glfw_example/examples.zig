@@ -23,14 +23,14 @@ fn randomColorBetween(min: f32, max: f32) zmath.Vec {
     );
 }
 
-pub fn spheres(ornament_context: *ornament.Context, allocator: std.mem.Allocator, aspect_ratio: f32) std.mem.Allocator.Error!*ornament.Scene {
+pub fn init_spheres(ornament_context: *ornament.Context, aspect_ratio: f32) !void {
     const vfov = 20.0;
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
     const vup = zmath.f32x4(0.0, 1.0, 0.0, 0.0);
     const aperture = 0.1;
     const focus_dist = 10.0;
-    const camera = ornament.Camera.init(
+    ornament_context.scene.camera = ornament.Camera.init(
         lookfrom,
         lookat,
         vup,
@@ -40,8 +40,7 @@ pub fn spheres(ornament_context: *ornament.Context, allocator: std.mem.Allocator
         focus_dist,
     );
 
-    var scene = try ornament.Scene.init(allocator, camera);
-    try scene.addSphere(try ornament_context.createSphere(
+    try ornament_context.scene.addSphere(try ornament_context.createSphere(
         zmath.f32x4(0.0, -1000.0, 0.0, 1.0),
         1000.0,
         try ornament_context.lambertian(zmath.f32x4(0.5, 0.5, 0.5, 1.0)),
@@ -60,28 +59,26 @@ pub fn spheres(ornament_context: *ornament.Context, allocator: std.mem.Allocator
                     ornament_context.metal(randomColorBetween(0.5, 1.0), 0.5 * rand.float(f32))
                 else
                     ornament_context.dielectric(1.5);
-                try scene.addSphere(try ornament_context.createSphere(center, 0.2, material));
+                try ornament_context.scene.addSphere(try ornament_context.createSphere(center, 0.2, material));
             }
         }
     }
 
-    try scene.addSphere(try ornament_context.createSphere(
+    try ornament_context.scene.addSphere(try ornament_context.createSphere(
         zmath.f32x4(0.0, 1.0, 0.0, 1.0),
         1.0,
         try ornament_context.dielectric(1.5),
     ));
 
-    try scene.addSphere(try ornament_context.createSphere(
+    try ornament_context.scene.addSphere(try ornament_context.createSphere(
         zmath.f32x4(-4.0, 1.0, 0.0, 1.0),
         1.0,
         try ornament_context.lambertian(zmath.f32x4(0.4, 0.2, 0.1, 1.0)),
     ));
 
-    try scene.addSphere(try ornament_context.createSphere(
+    try ornament_context.scene.addSphere(try ornament_context.createSphere(
         zmath.f32x4(4.0, 1.0, 0.0, 1.0),
         1.0,
         try ornament_context.metal(zmath.f32x4(0.7, 0.6, 0.5, 1.0), 0.0),
     ));
-
-    return scene;
 }
