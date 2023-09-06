@@ -1,4 +1,4 @@
-[submodule "zig-gamedev"]
+[submodule "libs/zig-gamedev"]
 	path = libs/zig-gamedev
 	url = https://github.com/michal-z/zig-gamedev.git
 	branch = main
