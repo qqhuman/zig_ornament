@@ -98,7 +98,7 @@ fn ray_color(ray: Ray) -> vec3<f32> {
             final_color *= (1.0 - t) * vec3<f32>(1.0) + t * vec3<f32>(0.5, 0.7, 1.0);
             //final_color = vec3<f32>(0.0);
             break;
-        }
+        }        
 
         var attenuation = vec3<f32>(0.0);
         rec.normal = normalize(rec.normal);
@@ -107,6 +107,10 @@ fn ray_color(ray: Ray) -> vec3<f32> {
             final_color *= attenuation;
         } else {
             final_color *= material_emit(rec);
+            break;
+        }
+
+        if all(final_color < vec3<f32>(0.00001)) {
             break;
         }
     }

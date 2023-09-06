@@ -9,35 +9,35 @@ const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 pub const Viewport = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
-    context: *ornament.Context,
+    ornament: *ornament.Context,
     swap_chain: ?wgpu.SwapChain,
     pipeline: ?WgpuRenderPipeline,
     shader_module: wgpu.ShaderModule,
     resolution: util.Resolution,
     dimensions_buffer: *buffers.Uniform(wgsl_structs.Resolution),
 
-    pub fn init(allocator: std.mem.Allocator, context: *ornament.Context) !*Self {
+    pub fn init(allocator: std.mem.Allocator, ornament_ctx: *ornament.Context) !*Self {
         var wgsl_descriptor = wgpu.ShaderModuleWgslDescriptor{
             .code = @embedFile("shaders/viewport.wgsl"),
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
-        const shader_module = context.wgpu_context.device.createShaderModule(.{
+        const shader_module = ornament_ctx.wgpu_context.device.createShaderModule(.{
             .next_in_chain = @ptrCast(&wgsl_descriptor),
             .label = "[ornament] wgpu viewport shader module",
         });
 
-        var resolution = context.getResolution();
+        var resolution = ornament_ctx.getResolution();
         var self = try allocator.create(Self);
         self.* = .{
             .allocator = allocator,
-            .context = context,
+            .ornament = ornament_ctx,
             .swap_chain = null,
             .shader_module = shader_module,
             .pipeline = null,
             .resolution = resolution,
             .dimensions_buffer = try buffers.Uniform(wgsl_structs.Resolution).init(
                 allocator,
-                context.wgpu_context,
+                ornament_ctx.wgpu_context,
                 false,
                 [2]u32{ resolution.width, resolution.height },
             ),
@@ -59,7 +59,7 @@ pub const Viewport = struct {
 
     pub fn setResolution(self: *Self, resolution: util.Resolution) void {
         self.resolution = resolution;
-        self.dimensions_buffer.write(self.context.wgpu_context.queue, [2]u32{ resolution.width, resolution.height });
+        self.dimensions_buffer.write(self.ornament.wgpu_context.queue, [2]u32{ resolution.width, resolution.height });
         if (self.swap_chain) |swap_chain| {
             swap_chain.release();
             self.swap_chain = null;
@@ -71,8 +71,8 @@ pub const Viewport = struct {
     }
 
     fn createSwapChain(self: *const Self) wgpu.SwapChain {
-        const surface = self.context.wgpu_context.surface orelse @panic("WGPUSurface is empty.");
-        return self.context.wgpu_context.device.createSwapChain(surface, .{
+        const surface = self.ornament.wgpu_context.surface orelse @panic("WGPUSurface is empty.");
+        return self.ornament.wgpu_context.device.createSwapChain(surface, .{
             .label = "[ornament] wgpu viewport swap chain",
             .width = self.resolution.width,
             .height = self.resolution.height,
@@ -93,10 +93,10 @@ pub const Viewport = struct {
         }};
 
         const bind_group_layout_entries = [_]wgpu.BindGroupLayoutEntry{
-            try self.context.targetBufferLayout(0, .{ .fragment = true }, true),
+            try self.ornament.targetBufferLayout(0, .{ .fragment = true }, true),
             self.dimensions_buffer.layout(1, .{ .fragment = true }),
         };
-        const bind_group_layout = self.context.wgpu_context.device.createBindGroupLayout(.{
+        const bind_group_layout = self.ornament.wgpu_context.device.createBindGroupLayout(.{
             .label = "[ornament] wgpu viewport render bgl",
             .entry_count = bind_group_layout_entries.len,
             .entries = &bind_group_layout_entries,
@@ -104,10 +104,10 @@ pub const Viewport = struct {
         defer bind_group_layout.release();
 
         const bind_group_entries = [_]wgpu.BindGroupEntry{
-            try self.context.targetBufferBinding(0),
+            try self.ornament.targetBufferBinding(0),
             self.dimensions_buffer.binding(1),
         };
-        const bind_group = self.context.wgpu_context.device.createBindGroup(.{
+        const bind_group = self.ornament.wgpu_context.device.createBindGroup(.{
             .label = "[ornament] wgpu viewport render bl",
             .layout = bind_group_layout,
             .entry_count = bind_group_entries.len,
@@ -115,7 +115,7 @@ pub const Viewport = struct {
         });
 
         const bind_group_layouts = [_]wgpu.BindGroupLayout{bind_group_layout};
-        const pipeline_layout = self.context.wgpu_context.device.createPipelineLayout(.{
+        const pipeline_layout = self.ornament.wgpu_context.device.createPipelineLayout(.{
             .label = "[ornament] wgpu viewport render pl",
             .bind_group_layout_count = bind_group_layouts.len,
             .bind_group_layouts = &bind_group_layouts,
@@ -124,7 +124,7 @@ pub const Viewport = struct {
 
         return .{
             .bind_group = bind_group,
-            .render_pipeline = self.context.wgpu_context.device.createRenderPipeline(.{
+            .render_pipeline = self.ornament.wgpu_context.device.createRenderPipeline(.{
                 .label = "[ornament] wgpu viewport render pipeline",
                 .layout = pipeline_layout,
                 .vertex = .{ .entry_point = "vs_main", .module = self.shader_module },
@@ -155,7 +155,7 @@ pub const Viewport = struct {
             break :blk pipeline;
         };
         const next_texture = swap_chain.getCurrentTextureView();
-        const commnad_encoder = self.context.wgpu_context.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
+        const commnad_encoder = self.ornament.wgpu_context.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
         defer commnad_encoder.release();
 
         const color_attachments = [_]wgpu.RenderPassColorAttachment{.{
@@ -177,7 +177,7 @@ pub const Viewport = struct {
         const command = commnad_encoder.finish(.{ .label = "[ornament] wgpu viewport command buffer" });
         defer command.release();
         const commands = [_]wgpu.CommandBuffer{command};
-        self.context.wgpu_context.queue.submit(&commands);
+        self.ornament.wgpu_context.queue.submit(&commands);
         swap_chain.present();
     }
 };

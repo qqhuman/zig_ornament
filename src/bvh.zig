@@ -9,7 +9,7 @@ const Sphere = ornament.Sphere;
 const Mesh = ornament.Mesh;
 const MeshInstance = ornament.MeshInstance;
 
-var prng = std.rand.DefaultPrng.init(100);
+var prng = std.rand.DefaultPrng.init(1244);
 const rand = prng.random();
 
 pub const Bvh = struct {
