@@ -28,8 +28,13 @@ pub const Target = struct {
             value.* = @truncate(index);
         }
         const rng_state_buffer = try Storage(u32).init(allocator, context, false, .{ .data = rng_seed });
-
         var self = try allocator.create(Self);
+
+        var workgroups = pixels_count / WORKGROUP_SIZE;
+        if (pixels_count % WORKGROUP_SIZE > 0) {
+            workgroups += 1;
+        }
+
         self.* = .{
             .allocator = allocator,
             .context = context,
@@ -38,7 +43,7 @@ pub const Target = struct {
             .rng_state_buffer = rng_state_buffer,
             .pixels_count = pixels_count,
             .resolution = resolution,
-            .workgroups = (pixels_count / WORKGROUP_SIZE) + (pixels_count % WORKGROUP_SIZE),
+            .workgroups = workgroups,
         };
         return self;
     }
