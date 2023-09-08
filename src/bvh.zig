@@ -301,7 +301,7 @@ fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_r
     var i: usize = 0;
     var normal_indices = try bvh.normal_indices.addManyAsSlice(mesh.normal_indices.items.len);
     while (i < mesh.normal_indices.items.len) : (i += 1) {
-        normal_indices[i] = mesh.normal_indices.items[i] + @as(u32, @truncate(mesh.normals.items.len));
+        normal_indices[i] = mesh.normal_indices.items[i] + @as(u32, @truncate(bvh.normals.items.len));
     }
 
     i = 0;

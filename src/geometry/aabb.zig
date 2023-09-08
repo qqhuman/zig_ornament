@@ -15,14 +15,14 @@ pub const Aabb = struct {
     }
 };
 
-pub fn transform_aabb(m: zmath.Mat, aabb: Aabb) Aabb {
+pub fn transformAabb(m: zmath.Mat, aabb: Aabb) Aabb {
     var p0 = aabb.min;
-    var p1 = zmath.f32x4(aabb.max.x, aabb.min.y, aabb.min.z, 1.0);
-    var p2 = zmath.f32x4(aabb.min.x, aabb.max.y, aabb.min.z, 1.0);
-    var p3 = zmath.f32x4(aabb.min.x, aabb.min.y, aabb.max.z, 1.0);
-    var p4 = zmath.f32x4(aabb.min.x, aabb.max.y, aabb.max.z, 1.0);
-    var p5 = zmath.f32x4(aabb.max.x, aabb.max.y, aabb.min.z, 1.0);
-    var p6 = zmath.f32x4(aabb.max.x, aabb.min.y, aabb.max.z, 1.0);
+    var p1 = zmath.f32x4(aabb.max[0], aabb.min[1], aabb.min[2], 1.0);
+    var p2 = zmath.f32x4(aabb.min[0], aabb.max[1], aabb.min[2], 1.0);
+    var p3 = zmath.f32x4(aabb.min[0], aabb.min[1], aabb.max[2], 1.0);
+    var p4 = zmath.f32x4(aabb.min[0], aabb.max[1], aabb.max[2], 1.0);
+    var p5 = zmath.f32x4(aabb.max[0], aabb.max[1], aabb.min[2], 1.0);
+    var p6 = zmath.f32x4(aabb.max[0], aabb.min[1], aabb.max[2], 1.0);
     var p7 = aabb.max;
 
     p0 = zmath.mul(p0, m);

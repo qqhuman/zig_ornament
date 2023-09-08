@@ -44,7 +44,7 @@ const App = struct {
             allocator,
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
-        try @import("examples.zig").init_spheres(ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_spheres_and_meshes_spheres(ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
         ornament_context.setFlipY(true);
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);

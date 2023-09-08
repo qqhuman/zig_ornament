@@ -4,7 +4,9 @@ pub const Camera = @import("camera.zig").Camera;
 pub const Sphere = @import("sphere.zig").Sphere;
 pub const Mesh = @import("mesh.zig").Mesh;
 pub const MeshInstance = @import("mesh_instance.zig").MeshInstance;
-pub const Aabb = @import("aabb.zig").Aabb;
+const aabb = @import("aabb.zig");
+pub const Aabb = aabb.Aabb;
+pub const transformAabb = aabb.transformAabb;
 
 pub const Scene = struct {
     const Self = @This();
