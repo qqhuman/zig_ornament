@@ -109,10 +109,6 @@ fn ray_color(ray: Ray) -> vec3<f32> {
             final_color *= material_emit(rec);
             break;
         }
-
-        if all(final_color < vec3<f32>(0.00001)) {
-            break;
-        }
     }
 
     return final_color;

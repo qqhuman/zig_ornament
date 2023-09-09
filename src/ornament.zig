@@ -312,8 +312,8 @@ pub const Context = struct {
         transform: zmath.Mat,
         material: *Material,
     ) std.mem.Allocator.Error!*Mesh {
-        var min = zmath.f32x4(std.math.floatMax(f32), std.math.floatMax(f32), std.math.floatMax(f32), 1.0);
-        var max = zmath.f32x4(std.math.floatMin(f32), std.math.floatMin(f32), std.math.floatMin(f32), 1.0);
+        var min = zmath.f32x4(std.math.inf(f32), std.math.inf(f32), std.math.inf(f32), 1.0);
+        var max = zmath.f32x4(-std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32), 1.0);
 
         var mesh_triangle_index: u32 = 0;
         while (mesh_triangle_index < vertex_indices.items.len / 3) : (mesh_triangle_index += 1) {

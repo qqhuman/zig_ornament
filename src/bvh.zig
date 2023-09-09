@@ -135,8 +135,8 @@ fn boxCompare(axis: usize, a: Leaf, b: Leaf) bool {
 }
 
 fn calculateBoundingBox(leafs: []Leaf) Aabb {
-    var min = zmath.f32x4(std.math.floatMax(f32), std.math.floatMax(f32), std.math.floatMax(f32), 1.0);
-    var max = zmath.f32x4(std.math.floatMin(f32), std.math.floatMin(f32), std.math.floatMin(f32), 1.0);
+    var min = zmath.f32x4(std.math.inf(f32), std.math.inf(f32), std.math.inf(f32), 1.0);
+    var max = zmath.f32x4(-std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32), 1.0);
 
     for (leafs) |l| {
         const aabb = switch (l) {
