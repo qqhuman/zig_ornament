@@ -18,34 +18,31 @@ pub const Context = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     state: State,
-    scene: *Scene,
+    scene: Scene,
     materials: std.ArrayList(*Material),
     spheres: std.ArrayList(*Sphere),
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
-    path_tracer: ?*PathTracer,
-    wgpu_context: *WgpuContext,
+    path_tracer: ?PathTracer,
+    wgpu_context: WgpuContext,
 
-    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu.SurfaceDescriptor) !*Self {
-        var self = try allocator.create(Self);
-        self.* = .{
+    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu.SurfaceDescriptor) !Self {
+        return .{
             .allocator = allocator,
             .state = State.init(),
-            .scene = try Scene.init(allocator),
+            .scene = Scene.init(allocator),
             .materials = std.ArrayList(*Material).init(allocator),
             .spheres = std.ArrayList(*Sphere).init(allocator),
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
-            .wgpu_context = try WgpuContext.init(allocator, surface_descriptor),
+            .wgpu_context = try WgpuContext.init(surface_descriptor),
             .path_tracer = null,
         };
-        return self;
     }
 
     pub fn deinit(self: *Self) void {
-        defer self.allocator.destroy(self);
         self.scene.deinit();
-        if (self.path_tracer) |pt| pt.deinit();
+        if (self.path_tracer) |*pt| pt.deinit();
         self.destroyElements(&self.spheres);
         for (self.meshes.items) |m| m.deinit();
         self.destroyElements(&self.meshes);
@@ -105,12 +102,13 @@ pub const Context = struct {
     }
 
     fn getOrCreatePathTracer(self: *Self) !*PathTracer {
-        return self.path_tracer orelse blk: {
-            var pt = try PathTracer.init(self.allocator, self.wgpu_context, &self.state, self.scene);
+        if (self.path_tracer == null) {
+            var pt = try PathTracer.init(self.allocator, self.wgpu_context.device, self.wgpu_context.queue, &self.state, &self.scene);
             self.path_tracer = pt;
             std.log.debug("[ornament] path tracer was created", .{});
-            break :blk pt;
-        };
+        }
+
+        return &self.path_tracer.?;
     }
 
     pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
@@ -128,12 +126,12 @@ pub const Context = struct {
         if (self.state.iterations > 1) {
             var i: u32 = 0;
             while (i < self.state.iterations) : (i += 1) {
-                path_tracer.update(&self.state, self.scene);
+                path_tracer.update(&self.state, &self.scene);
                 try path_tracer.render();
             }
             try path_tracer.post_processing();
         } else {
-            path_tracer.update(&self.state, self.scene);
+            path_tracer.update(&self.state, &self.scene);
             try path_tracer.render_and_apply_post_processing();
         }
     }

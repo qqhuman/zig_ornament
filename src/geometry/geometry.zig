@@ -16,9 +16,8 @@ pub const Scene = struct {
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
 
-    pub fn init(allocator: std.mem.Allocator) std.mem.Allocator.Error!*Self {
-        var self = try allocator.create(Self);
-        self.* = .{
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return .{
             .allocator = allocator,
             .camera = Camera.init(
                 zmath.f32x4(1.0, 1.0, 1.0, 1.0),
@@ -33,11 +32,9 @@ pub const Scene = struct {
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
         };
-        return self;
     }
 
     pub fn deinit(self: *Self) void {
-        defer self.allocator.destroy(self);
         self.spheres.deinit();
         self.meshes.deinit();
         self.mesh_instances.deinit();

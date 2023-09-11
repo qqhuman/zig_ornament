@@ -8,36 +8,31 @@ pub const WORKGROUP_SIZE: u32 = 256;
 
 pub const Target = struct {
     const Self = @This();
-    allocator: std.mem.Allocator,
-    context: *const WgpuContext,
-    buffer: *Storage(wgsl_structs.Vector4),
-    accumulation_buffer: *Storage(wgsl_structs.Vector4),
-    rng_state_buffer: *Storage(u32),
+    buffer: Storage(wgsl_structs.Vector4),
+    accumulation_buffer: Storage(wgsl_structs.Vector4),
+    rng_state_buffer: Storage(u32),
     pixels_count: u32,
     resolution: util.Resolution,
     workgroups: u32,
 
-    pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, resolution: util.Resolution) !*Self {
+    pub fn init(allocator: std.mem.Allocator, device: wgpu.Device, resolution: util.Resolution) !Self {
         const pixels_count = resolution.width * resolution.height;
-        const buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, true, .{ .element_count = pixels_count });
-        const accumulation_buffer = try Storage(wgsl_structs.Vector4).init(allocator, context, false, .{ .element_count = pixels_count });
+        const buffer = Storage(wgsl_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
+        const accumulation_buffer = Storage(wgsl_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
 
         var rng_seed = try allocator.alloc(u32, pixels_count);
         defer allocator.free(rng_seed);
         for (rng_seed, 0..) |*value, index| {
             value.* = @truncate(index);
         }
-        const rng_state_buffer = try Storage(u32).init(allocator, context, false, .{ .data = rng_seed });
-        var self = try allocator.create(Self);
+        const rng_state_buffer = Storage(u32).init(device, false, .{ .data = rng_seed });
 
         var workgroups = pixels_count / WORKGROUP_SIZE;
         if (pixels_count % WORKGROUP_SIZE > 0) {
             workgroups += 1;
         }
 
-        self.* = .{
-            .allocator = allocator,
-            .context = context,
+        return .{
             .buffer = buffer,
             .accumulation_buffer = accumulation_buffer,
             .rng_state_buffer = rng_state_buffer,
@@ -45,20 +40,18 @@ pub const Target = struct {
             .resolution = resolution,
             .workgroups = workgroups,
         };
-        return self;
     }
     pub fn deinit(self: *Self) void {
-        defer self.allocator.destroy(self);
         self.buffer.deinit();
         self.accumulation_buffer.deinit();
         self.rng_state_buffer.deinit();
     }
 
-    pub fn layout(self: *const Self, binding_id: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
+    pub fn layout(self: Self, binding_id: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
         return self.buffer.layout(binding_id, visibility, read_only);
     }
 
-    pub fn binding(self: *const Self, binding_id: u32) wgpu.BindGroupEntry {
+    pub fn binding(self: Self, binding_id: u32) wgpu.BindGroupEntry {
         return self.buffer.binding(binding_id);
     }
 };
@@ -72,11 +65,10 @@ fn paddedBufferSize(unpadded_size: u64) u64 {
 pub fn Storage(comptime T: type) type {
     return struct {
         const Self = @This();
-        allocator: std.mem.Allocator,
         handle: wgpu.Buffer,
         padded_size_in_bytes: u64,
 
-        pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, copy_src: bool, init_data: union(enum) { element_count: u64, data: []const T }) !*Self {
+        pub fn init(device: wgpu.Device, copy_src: bool, init_data: union(enum) { element_count: u64, data: []const T }) Self {
             var usage = wgpu.BufferUsage{ .storage = true };
             if (copy_src) {
                 usage.copy_src = true;
@@ -89,13 +81,13 @@ pub fn Storage(comptime T: type) type {
             };
 
             const handle = switch (init_data) {
-                .element_count => context.device.createBuffer(.{
+                .element_count => device.createBuffer(.{
                     .label = label,
                     .usage = usage,
                     .size = padded_size_in_bytes,
                 }),
                 .data => |data| blk: {
-                    const handle = context.device.createBuffer(.{
+                    const handle = device.createBuffer(.{
                         .label = label,
                         .usage = usage,
                         .mapped_at_creation = true,
@@ -110,17 +102,14 @@ pub fn Storage(comptime T: type) type {
                 },
             };
 
-            var self = try allocator.create(Self);
-            self.* = .{ .allocator = allocator, .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
-            return self;
+            return .{ .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
         }
 
         pub fn deinit(self: *Self) void {
-            defer self.allocator.destroy(self);
             self.handle.release();
         }
 
-        pub fn layout(self: *const Self, binding_id: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
+        pub fn layout(self: Self, binding_id: u32, visibility: wgpu.ShaderStage, read_only: bool) wgpu.BindGroupLayoutEntry {
             _ = self;
             return .{
                 .binding = binding_id,
@@ -129,7 +118,7 @@ pub fn Storage(comptime T: type) type {
             };
         }
 
-        pub fn binding(self: *const Self, binding_id: u32) wgpu.BindGroupEntry {
+        pub fn binding(self: Self, binding_id: u32) wgpu.BindGroupEntry {
             return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
         }
     };
@@ -138,18 +127,17 @@ pub fn Storage(comptime T: type) type {
 pub fn Uniform(comptime T: type) type {
     return struct {
         const Self = @This();
-        allocator: std.mem.Allocator,
         handle: wgpu.Buffer,
         padded_size_in_bytes: u64,
 
-        pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, read_only: bool, data: T) !*Self {
+        pub fn init(device: wgpu.Device, read_only: bool, data: T) Self {
             var usage = wgpu.BufferUsage{ .uniform = true };
             if (!read_only) {
                 usage.copy_dst = true;
             }
 
             const padded_size_in_bytes = paddedBufferSize(@sizeOf(T));
-            const handle = context.device.createBuffer(.{
+            const handle = device.createBuffer(.{
                 .label = "[ornament] " ++ @typeName(T) ++ " uniform",
                 .usage = usage,
                 .mapped_at_creation = true,
@@ -159,26 +147,23 @@ pub fn Uniform(comptime T: type) type {
             std.mem.copy(T, dst, &[_]T{data});
             handle.unmap();
 
-            var self = try allocator.create(Self);
-            self.* = .{ .allocator = allocator, .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
-            return self;
+            return .{ .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
         }
 
         pub fn deinit(self: *Self) void {
-            defer self.allocator.destroy(self);
             self.handle.release();
         }
 
-        pub fn layout(self: *const Self, binding_id: u32, visibility: wgpu.ShaderStage) wgpu.BindGroupLayoutEntry {
+        pub fn layout(self: Self, binding_id: u32, visibility: wgpu.ShaderStage) wgpu.BindGroupLayoutEntry {
             _ = self;
             return .{ .binding = binding_id, .visibility = visibility, .buffer = .{ .binding_type = .uniform } };
         }
 
-        pub fn binding(self: *const Self, binding_id: u32) wgpu.BindGroupEntry {
+        pub fn binding(self: Self, binding_id: u32) wgpu.BindGroupEntry {
             return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
         }
 
-        pub fn write(self: *const Self, queue: wgpu.Queue, data: T) void {
+        pub fn write(self: Self, queue: wgpu.Queue, data: T) void {
             queue.writeBuffer(self.handle, 0, T, &[_]T{data});
         }
     };

@@ -10,40 +10,41 @@ const Bvh = @import("../bvh.zig").Bvh;
 pub const PathTracer = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
-    context: *const WgpuContext,
+    device: wgpu.Device,
+    queue: wgpu.Queue,
 
     resolution: util.Resolution,
     bvh: Bvh,
     dynamic_state: wgsl_structs.DynamicState,
 
-    target_buffer: ?*buffers.Target,
-    dynamic_state_buffer: *buffers.Uniform(wgsl_structs.DynamicState),
-    constant_state_buffer: *buffers.Uniform(wgsl_structs.ConstantState),
-    camera_buffer: *buffers.Uniform(wgsl_structs.Camera),
+    target_buffer: ?buffers.Target,
+    dynamic_state_buffer: buffers.Uniform(wgsl_structs.DynamicState),
+    constant_state_buffer: buffers.Uniform(wgsl_structs.ConstantState),
+    camera_buffer: buffers.Uniform(wgsl_structs.Camera),
 
-    materials_buffer: *buffers.Storage(wgsl_structs.Material),
-    normals_buffer: *buffers.Storage(wgsl_structs.Normal),
-    normal_indices_buffer: *buffers.Storage(u32),
-    transforms_buffer: *buffers.Storage(wgsl_structs.Transform),
-    nodes_buffer: *buffers.Storage(wgsl_structs.Node),
+    materials_buffer: buffers.Storage(wgsl_structs.Material),
+    normals_buffer: buffers.Storage(wgsl_structs.Normal),
+    normal_indices_buffer: buffers.Storage(u32),
+    transforms_buffer: buffers.Storage(wgsl_structs.Transform),
+    nodes_buffer: buffers.Storage(wgsl_structs.Node),
 
     shader_module: wgpu.ShaderModule,
     pipelines: ?WgpuPipelines,
 
-    pub fn init(allocator: std.mem.Allocator, context: *const WgpuContext, state: *const ornament.State, scene: *const ornament.Scene) !*Self {
+    pub fn init(allocator: std.mem.Allocator, device: wgpu.Device, queue: wgpu.Queue, state: *const ornament.State, scene: *const ornament.Scene) !Self {
         const bvh = try Bvh.init(allocator, scene);
         const resolution = state.getResolution();
 
         const dynamic_state = wgsl_structs.DynamicState{};
-        const dynamic_state_buffer = try buffers.Uniform(wgsl_structs.DynamicState).init(allocator, context, false, dynamic_state);
-        const constant_state_buffer = try buffers.Uniform(wgsl_structs.ConstantState).init(allocator, context, false, wgsl_structs.ConstantState.from(state));
-        const camera_buffer = try buffers.Uniform(wgsl_structs.Camera).init(allocator, context, false, wgsl_structs.Camera.from(&scene.camera));
+        const dynamic_state_buffer = buffers.Uniform(wgsl_structs.DynamicState).init(device, false, dynamic_state);
+        const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(state));
+        const camera_buffer = buffers.Uniform(wgsl_structs.Camera).init(device, false, wgsl_structs.Camera.from(&scene.camera));
 
-        const materials_buffer = try buffers.Storage(wgsl_structs.Material).init(allocator, context, false, .{ .data = bvh.materials.items });
-        const normals_buffer = try buffers.Storage(wgsl_structs.Normal).init(allocator, context, false, .{ .data = bvh.normals.items });
-        const normal_indices_buffer = try buffers.Storage(u32).init(allocator, context, false, .{ .data = bvh.normal_indices.items });
-        const transforms_buffer = try buffers.Storage(wgsl_structs.Transform).init(allocator, context, false, .{ .data = bvh.transforms.items });
-        const nodes_buffer = try buffers.Storage(wgsl_structs.Node).init(allocator, context, false, .{ .data = bvh.nodes.items });
+        const materials_buffer = buffers.Storage(wgsl_structs.Material).init(device, false, .{ .data = bvh.materials.items });
+        const normals_buffer = buffers.Storage(wgsl_structs.Normal).init(device, false, .{ .data = bvh.normals.items });
+        const normal_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.normal_indices.items });
+        const transforms_buffer = buffers.Storage(wgsl_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
+        const nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.nodes.items });
 
         const code = @embedFile("shaders/bvh.wgsl") ++ "\n" ++
             @embedFile("shaders/pathtracer.wgsl") ++ "\n" ++
@@ -61,15 +62,15 @@ pub const PathTracer = struct {
             .code = code,
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
-        const shader_module = context.device.createShaderModule(.{
+        const shader_module = device.createShaderModule(.{
             .next_in_chain = @ptrCast(&wgsl_descriptor),
             .label = "[ornament] path tracer shader module",
         });
 
-        var self = try allocator.create(Self);
-        self.* = .{
+        return .{
             .allocator = allocator,
-            .context = context,
+            .device = device,
+            .queue = queue,
 
             .resolution = resolution,
             .bvh = bvh,
@@ -89,11 +90,9 @@ pub const PathTracer = struct {
             .shader_module = shader_module,
             .pipelines = null,
         };
-        return self;
     }
 
     pub fn deinit(self: *Self) void {
-        defer self.allocator.destroy(self);
         self.bvh.deinit();
         self.shader_module.release();
         self.dynamic_state_buffer.deinit();
@@ -104,8 +103,8 @@ pub const PathTracer = struct {
         self.normal_indices_buffer.deinit();
         self.transforms_buffer.deinit();
         self.nodes_buffer.deinit();
-        if (self.target_buffer) |tb| tb.deinit();
-        if (self.pipelines) |pipelines| pipelines.release();
+        if (self.target_buffer) |*tb| tb.deinit();
+        if (self.pipelines) |*pipelines| pipelines.release();
     }
 
     pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
@@ -124,12 +123,13 @@ pub const PathTracer = struct {
     }
 
     fn getOrCreateTargetBuffer(self: *Self) !*buffers.Target {
-        return self.target_buffer orelse {
-            var tb = try buffers.Target.init(self.allocator, self.context, self.resolution);
+        if (self.target_buffer == null) {
+            var tb = try buffers.Target.init(self.allocator, self.device, self.resolution);
             self.target_buffer = tb;
             std.log.debug("[ornament] target buffer was created", .{});
-            return tb;
-        };
+        }
+
+        return &self.target_buffer.?;
     }
 
     fn getOrCreatePipelines(self: *Self) !WgpuPipelines {
@@ -145,7 +145,7 @@ pub const PathTracer = struct {
                     target_buffer.accumulation_buffer.layout(1, .{ .compute = true }, false),
                     target_buffer.rng_state_buffer.layout(2, .{ .compute = true }, false),
                 };
-                const bgl = self.context.device.createBindGroupLayout(.{
+                const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] target bgl",
                     .entry_count = layout_entries.len,
                     .entries = &layout_entries,
@@ -156,7 +156,7 @@ pub const PathTracer = struct {
                     target_buffer.accumulation_buffer.binding(1),
                     target_buffer.rng_state_buffer.binding(2),
                 };
-                const bg = self.context.device.createBindGroup(.{
+                const bg = self.device.createBindGroup(.{
                     .label = "[ornament] target bg",
                     .layout = bgl,
                     .entry_count = group_entries.len,
@@ -172,7 +172,7 @@ pub const PathTracer = struct {
                     self.constant_state_buffer.layout(1, .{ .compute = true }),
                     self.camera_buffer.layout(2, .{ .compute = true }),
                 };
-                const bgl = self.context.device.createBindGroupLayout(.{
+                const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] dynstate conststate camera bgl",
                     .entry_count = layout_entries.len,
                     .entries = &layout_entries,
@@ -183,7 +183,7 @@ pub const PathTracer = struct {
                     self.constant_state_buffer.binding(1),
                     self.camera_buffer.binding(2),
                 };
-                const bg = self.context.device.createBindGroup(.{
+                const bg = self.device.createBindGroup(.{
                     .label = "[ornament] dynstate conststate camera bg",
                     .layout = bgl,
                     .entry_count = group_entries.len,
@@ -198,7 +198,7 @@ pub const PathTracer = struct {
                     self.materials_buffer.layout(0, .{ .compute = true }, true),
                     self.nodes_buffer.layout(1, .{ .compute = true }, true),
                 };
-                const bgl = self.context.device.createBindGroupLayout(.{
+                const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] materials bvhnodes bgl",
                     .entry_count = layout_entries.len,
                     .entries = &layout_entries,
@@ -208,7 +208,7 @@ pub const PathTracer = struct {
                     self.materials_buffer.binding(0),
                     self.nodes_buffer.binding(1),
                 };
-                const bg = self.context.device.createBindGroup(.{
+                const bg = self.device.createBindGroup(.{
                     .label = "[ornament] materials bvhnodes bg",
                     .layout = bgl,
                     .entry_count = group_entries.len,
@@ -224,7 +224,7 @@ pub const PathTracer = struct {
                     self.normal_indices_buffer.layout(1, .{ .compute = true }, true),
                     self.transforms_buffer.layout(2, .{ .compute = true }, true),
                 };
-                const bgl = self.context.device.createBindGroupLayout(.{
+                const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] normals normal_indices transforms bgl",
                     .entry_count = layout_entries.len,
                     .entries = &layout_entries,
@@ -235,7 +235,7 @@ pub const PathTracer = struct {
                     self.normal_indices_buffer.binding(1),
                     self.transforms_buffer.binding(2),
                 };
-                const bg = self.context.device.createBindGroup(.{
+                const bg = self.device.createBindGroup(.{
                     .label = "[ornament] normals normal_indices transforms bg",
                     .layout = bgl,
                     .entry_count = group_entries.len,
@@ -245,7 +245,7 @@ pub const PathTracer = struct {
                 bind_groups[3] = bg;
             }
 
-            const pipeline_layout = self.context.device.createPipelineLayout(.{
+            const pipeline_layout = self.device.createPipelineLayout(.{
                 .label = "[ornament] pipeline layout",
                 .bind_group_layout_count = bind_group_layouts.len,
                 .bind_group_layouts = &bind_group_layouts,
@@ -253,17 +253,17 @@ pub const PathTracer = struct {
             defer pipeline_layout.release();
 
             const pipelines = WgpuPipelines{
-                .path_tracing_pipeline = self.context.device.createComputePipeline(.{
+                .path_tracing_pipeline = self.device.createComputePipeline(.{
                     .label = "[ornament] path tracing pipeline",
                     .layout = pipeline_layout,
                     .compute = .{ .module = self.shader_module, .entry_point = "main_render" },
                 }),
-                .post_processing_pipeline = self.context.device.createComputePipeline(.{
+                .post_processing_pipeline = self.device.createComputePipeline(.{
                     .label = "[ornament] post processing pipeline",
                     .layout = pipeline_layout,
                     .compute = .{ .module = self.shader_module, .entry_point = "main_post_processing" },
                 }),
-                .path_tracing_and_post_processing_pipeline = self.context.device.createComputePipeline(.{
+                .path_tracing_and_post_processing_pipeline = self.device.createComputePipeline(.{
                     .label = "[ornament] post processing pipeline",
                     .layout = pipeline_layout,
                     .compute = .{ .module = self.shader_module, .entry_point = "main" },
@@ -278,11 +278,11 @@ pub const PathTracer = struct {
 
     pub fn setResolution(self: *Self, resolution: util.Resolution) void {
         self.resolution = resolution;
-        if (self.target_buffer) |tb| {
+        if (self.target_buffer) |*tb| {
             tb.deinit();
             self.target_buffer = null;
         }
-        if (self.pipelines) |pipelines| {
+        if (self.pipelines) |*pipelines| {
             pipelines.release();
             self.pipelines = null;
         }
@@ -297,22 +297,22 @@ pub const PathTracer = struct {
         if (scene.camera.dirty) {
             dirty = true;
             scene.camera.dirty = false;
-            self.camera_buffer.write(self.context.queue, wgsl_structs.Camera.from(&scene.camera));
+            self.camera_buffer.write(self.queue, wgsl_structs.Camera.from(&scene.camera));
         }
 
         if (state.dirty) {
             dirty = true;
             state.dirty = false;
-            self.constant_state_buffer.write(self.context.queue, wgsl_structs.ConstantState.from(state));
+            self.constant_state_buffer.write(self.queue, wgsl_structs.ConstantState.from(state));
         }
 
         if (dirty) self.reset();
         self.dynamic_state.nextIteration();
-        self.dynamic_state_buffer.write(self.context.queue, self.dynamic_state);
+        self.dynamic_state_buffer.write(self.queue, self.dynamic_state);
     }
 
     fn runPipeline(self: *Self, pipeline: wgpu.ComputePipeline, bind_groups: [4]wgpu.BindGroup, comptime pipeline_name: []const u8) !void {
-        const encoder = self.context.device.createCommandEncoder(.{ .label = "[ornament] " ++ pipeline_name ++ "command encoder" });
+        const encoder = self.device.createCommandEncoder(.{ .label = "[ornament] " ++ pipeline_name ++ "command encoder" });
         defer encoder.release();
 
         {
@@ -330,8 +330,8 @@ pub const PathTracer = struct {
         const command = encoder.finish(.{ .label = "[ornament] " ++ pipeline_name ++ " command buffer" });
         defer command.release();
 
-        self.context.queue.submit(&[_]wgpu.CommandBuffer{command});
-        self.context.device.tick();
+        self.queue.submit(&[_]wgpu.CommandBuffer{command});
+        self.device.tick();
     }
 
     pub fn render(self: *Self) !void {

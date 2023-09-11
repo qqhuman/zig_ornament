@@ -25,8 +25,8 @@ const App = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     window: *zglfw.Window,
-    ornament: *ornament.Context,
-    viewport: *Viewport,
+    ornament: ornament.Context,
+    viewport: ?Viewport,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_example] init", .{});
@@ -44,24 +44,25 @@ const App = struct {
             allocator,
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
-        try @import("examples.zig").init_spheres_and_meshes_spheres(ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_spheres_and_meshes_spheres(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
         ornament_context.setFlipY(true);
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
         ornament_context.setGamma(2.2);
 
+        const viewport = try Viewport.init(&ornament_context);
         return .{
             .allocator = allocator,
             .window = window,
             .ornament = ornament_context,
-            .viewport = try Viewport.init(allocator, ornament_context),
+            .viewport = viewport,
         };
     }
 
     pub fn deinit(self: *Self) void {
         std.log.debug("[glfw_example] deinit", .{});
-        self.viewport.deinit();
+        if (self.viewport) |*v| v.deinit();
         self.ornament.deinit();
         self.window.destroy();
         zglfw.terminate();
@@ -80,7 +81,10 @@ const App = struct {
             std.log.debug("[glfw_example] onFramebufferSize width = {d}, height = {d}", .{ width, height });
             self.ornament.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
             self.ornament.setResolution(new_resolution) catch unreachable;
-            self.viewport.setResolution(new_resolution);
+            if (self.viewport) |*v| {
+                v.deinit();
+                self.viewport = null;
+            }
         }
     }
 
@@ -90,7 +94,8 @@ const App = struct {
         while (!self.window.shouldClose()) {
             zglfw.pollEvents();
             try self.ornament.render();
-            try self.viewport.render();
+            if (self.viewport == null) self.viewport = try Viewport.init(&self.ornament);
+            try self.viewport.?.render();
             fps_counter.endFrames(ITERATIONS);
         }
     }

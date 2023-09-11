@@ -20,7 +20,6 @@ extern fn dawnProcSetProcs(procs: DawnProcsTable) void;
 
 pub const WgpuContext = struct {
     const Self = @This();
-    allocator: std.mem.Allocator,
     native_instance: DawnNativeInstance,
     instance: wgpu.Instance,
     surface: ?wgpu.Surface,
@@ -28,7 +27,7 @@ pub const WgpuContext = struct {
     device: wgpu.Device,
     queue: wgpu.Queue,
 
-    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu.SurfaceDescriptor) !*Self {
+    pub fn init(surface_descriptor: ?wgpu.SurfaceDescriptor) !Self {
         dawnProcSetProcs(dnGetProcs());
         const native_instance = dniCreate().?;
         dniDiscoverDefaultAdapters(native_instance);
@@ -46,22 +45,12 @@ pub const WgpuContext = struct {
             std.log.debug("[ornament] adapter driver: {s}", .{properties.driver_description});
             std.log.debug("[ornament] adapter type: {s}", .{@tagName(properties.adapter_type)});
             std.log.debug("[ornament] adapter backend type: {s}", .{@tagName(properties.backend_type)});
-
-            // const feature_count = c.wgpuAdapterEnumerateFeatures(adapter, null);
-            // const features = allocator.alloc(c.WGPUFeatureName, feature_count) catch return WgpuError.AllocationFailed;
-            // defer allocator.free(features);
-            // _ = c.wgpuAdapterEnumerateFeatures(adapter, features.ptr);
-            // for (features) |f| {
-            //     std.log.debug("[ornament] adapter feature: {d}", .{f});
-            // }
         }
 
         const device = try requestDevice(adapter, .{ .label = "[ornament] wgpu device" });
         device.setUncapturedErrorCallback(onUncapturedError, null);
 
-        var self = try allocator.create(Self);
-        self.* = .{
-            .allocator = allocator,
+        return .{
             .native_instance = native_instance,
             .instance = instance,
             .surface = surface,
@@ -69,11 +58,9 @@ pub const WgpuContext = struct {
             .device = device,
             .queue = device.getQueue(),
         };
-        return self;
     }
 
     pub fn deinit(self: *Self) void {
-        defer self.allocator.destroy(self);
         self.queue.release();
         self.device.release();
         self.adapter.release();
