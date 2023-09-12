@@ -44,12 +44,12 @@ const App = struct {
             allocator,
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
-        try @import("examples.zig").init_spheres_and_meshes_spheres(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        ornament_context.setGamma(2.2);
         ornament_context.setFlipY(true);
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
-        ornament_context.setGamma(2.2);
+        try @import("examples.zig").init_spheres_and_meshes_spheres(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
         const viewport = try Viewport.init(&ornament_context);
         return .{
@@ -94,7 +94,10 @@ const App = struct {
         while (!self.window.shouldClose()) {
             zglfw.pollEvents();
             try self.ornament.render();
-            if (self.viewport == null) self.viewport = try Viewport.init(&self.ornament);
+            if (self.viewport == null) {
+                self.viewport = try Viewport.init(&self.ornament);
+                std.log.debug("[glfw_example] viewport was created", .{});
+            }
             try self.viewport.?.render();
             fps_counter.endFrames(ITERATIONS);
         }

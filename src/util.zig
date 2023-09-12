@@ -21,7 +21,7 @@ pub const FpsCounter = struct {
         self.frames += frames;
         const delta_time = @as(f64, @floatFromInt(self.timer.read())) / std.time.ns_per_s;
         if (delta_time > 1.0) {
-            std.log.info("FPS: {d}", .{@as(f64, @floatFromInt(self.frames)) / delta_time});
+            std.log.debug("FPS: {d}", .{@as(f64, @floatFromInt(self.frames)) / delta_time});
             self.frames = 0;
             self.timer.reset();
         }

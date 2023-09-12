@@ -85,8 +85,9 @@ pub const Context = struct {
 
     pub fn setResolution(self: *Self, resolution: util.Resolution) !void {
         self.state.setResolution(resolution);
-        var pt = try self.getOrCreatePathTracer();
-        pt.setResolution(resolution);
+        if (self.path_tracer) |*pt| {
+            pt.setResolution(resolution);
+        }
     }
 
     pub fn getResolution(self: Self) util.Resolution {

@@ -123,11 +123,3 @@ fn onUncapturedError(error_type: wgpu.ErrorType, message: ?[*:0]const u8, userda
         std.log.err("[ornament] onUncapturedError message: {s}", .{msg});
     }
 }
-
-fn onSubmittedWorkDone(status: wgpu.QueueWorkDoneStatus, userdata: ?*anyopaque) callconv(.C) void {
-    _ = userdata;
-
-    if (status != .Success) {
-        std.log.err("[ornament] onSubmittedWorkDone with status: {s}", .{@tagName(status)});
-    }
-}
