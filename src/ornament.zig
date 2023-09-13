@@ -293,10 +293,10 @@ pub const Context = struct {
 
         const transform = zmath.mul(zmath.scaling(radius, radius, radius), zmath.translationV(center));
         return self.createMesh(
-            vertices,
-            indices,
-            normals,
-            indices,
+            vertices.items,
+            indices.items,
+            normals.items,
+            indices.items,
             transform,
             material,
         );
@@ -304,10 +304,10 @@ pub const Context = struct {
 
     pub fn createMesh(
         self: *Self,
-        vertices: std.ArrayList(zmath.Vec),
-        vertex_indices: std.ArrayList(u32),
-        normals: std.ArrayList(zmath.Vec),
-        normal_indices: std.ArrayList(u32),
+        vertices: []zmath.Vec,
+        vertex_indices: []u32,
+        normals: []zmath.Vec,
+        normal_indices: []u32,
         transform: zmath.Mat,
         material: *Material,
     ) std.mem.Allocator.Error!*Mesh {
@@ -315,27 +315,34 @@ pub const Context = struct {
         var max = zmath.f32x4(-std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32), 1.0);
 
         var mesh_triangle_index: u32 = 0;
-        while (mesh_triangle_index < vertex_indices.items.len / 3) : (mesh_triangle_index += 1) {
-            const v0 = vertices.items[vertex_indices.items[mesh_triangle_index * 3]];
-            const v1 = vertices.items[vertex_indices.items[mesh_triangle_index * 3 + 1]];
-            const v2 = vertices.items[vertex_indices.items[mesh_triangle_index * 3 + 2]];
+        while (mesh_triangle_index < vertex_indices.len / 3) : (mesh_triangle_index += 1) {
+            const v0 = vertices[vertex_indices[mesh_triangle_index * 3]];
+            const v1 = vertices[vertex_indices[mesh_triangle_index * 3 + 1]];
+            const v2 = vertices[vertex_indices[mesh_triangle_index * 3 + 2]];
             min = zmath.min(min, zmath.min(zmath.min(v0, v1), v2));
             max = zmath.max(max, zmath.max(zmath.max(v0, v1), v2));
         }
 
         const not_transformed_aabb = Aabb.init(min, max);
         const aabb = geometry.transformAabb(transform, not_transformed_aabb);
-        return self.addElement(Mesh{
-            .vertices = try vertices.clone(),
-            .vertex_indices = try vertex_indices.clone(),
-            .normals = try normals.clone(),
-            .normal_indices = try normal_indices.clone(),
+
+        var mesh = try self.addElement(Mesh{
+            .vertices = try std.ArrayList(zmath.Vec).initCapacity(self.allocator, vertices.len),
+            .vertex_indices = try std.ArrayList(u32).initCapacity(self.allocator, vertex_indices.len),
+            .normals = try std.ArrayList(zmath.Vec).initCapacity(self.allocator, normals.len),
+            .normal_indices = try std.ArrayList(u32).initCapacity(self.allocator, normal_indices.len),
             .transform = transform,
             .material = material,
             .bvh_id = null,
             .aabb = aabb,
             .not_transformed_aabb = not_transformed_aabb,
         }, &self.meshes);
+
+        try mesh.vertices.appendSlice(vertices);
+        try mesh.vertex_indices.appendSlice(vertex_indices);
+        try mesh.normals.appendSlice(normals);
+        try mesh.normal_indices.appendSlice(normal_indices);
+        return mesh;
     }
 
     pub fn releaseMesh(self: *Self, mesh: *const Mesh) void {

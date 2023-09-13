@@ -239,7 +239,7 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
     } else {
         // Sort shapes based on the split axis
         const axis = rand.intRangeAtMost(usize, 0, 2);
-        std.sort.insertion(Leaf, leafs, axis, boxCompare);
+        std.sort.heap(Leaf, leafs, axis, boxCompare);
 
         // Partition shapes into left and right subsets
         const mid = leafs.len / 2;
@@ -276,7 +276,7 @@ fn appendTransform(bvh: *Bvh, transform: zmath.Mat) !void {
 }
 
 fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_resolve: *std.AutoHashMap(u32, *const MeshInstance)) std.mem.Allocator.Error!wgsl_structs.Node {
-    var leafs = try std.ArrayList(Leaf).initCapacity(allocator, mesh.vertex_indices.items.len);
+    var leafs = try std.ArrayList(Leaf).initCapacity(allocator, mesh.vertex_indices.items.len / 3);
     defer leafs.deinit();
 
     var mesh_triangle_index: usize = 0;
@@ -309,7 +309,6 @@ fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_r
     while (i < mesh.normals.items.len) : (i += 1) {
         normals[i] = zmath.vecToArr4(mesh.normals.items[i]);
     }
-
     return try buildBvhRecursive(allocator, bvh, leafs.items, isntances_to_resolve);
 }
 

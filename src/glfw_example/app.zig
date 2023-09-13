@@ -49,7 +49,7 @@ const App = struct {
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
-        try @import("examples.zig").init_spheres_and_meshes_spheres(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_spheres_and_3_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
         const viewport = try Viewport.init(&ornament_context);
         return .{

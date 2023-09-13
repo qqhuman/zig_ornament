@@ -122,4 +122,6 @@ fn onUncapturedError(error_type: wgpu.ErrorType, message: ?[*:0]const u8, userda
     if (message) |msg| {
         std.log.err("[ornament] onUncapturedError message: {s}", .{msg});
     }
+
+    @panic("uncaptured error");
 }
