@@ -317,8 +317,10 @@ pub const PathTracer = struct {
 
         {
             const pass = encoder.beginComputePass(.{ .label = "[ornament] " ++ pipeline_name ++ " compute pass", .timestamp_write_count = 0, .timestamp_writes = null });
-            defer pass.release();
-            defer pass.end();
+            defer {
+                pass.end();
+                pass.release();
+            }
 
             pass.setPipeline(pipeline);
             inline for (bind_groups, 0..) |bg, i| {

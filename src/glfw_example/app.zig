@@ -1,4 +1,5 @@
 const std = @import("std");
+const zmath = @import("zmath");
 const zglfw = @import("zglfw");
 const wgpu = @import("zgpu").wgpu;
 const util = @import("../util.zig");
@@ -88,11 +89,21 @@ const App = struct {
         }
     }
 
+    pub fn update(self: *Self) void {
+        _ = self;
+        // const target = self.ornament.scene.camera.getLookAt();
+        // var eye = self.ornament.scene.camera.getLookFrom();
+        // const up = self.ornament.scene.camera.getVUp();
+        // const forward = target - eye;
+        // const forward_mag =
+    }
+
     pub fn renderLoop(self: *Self) !void {
         std.log.debug("[glfw_example] renderLoop", .{});
         var fps_counter = util.FpsCounter.init();
-        while (!self.window.shouldClose()) {
+        while (!self.window.shouldClose() and self.window.getKey(.escape) != .press) {
             zglfw.pollEvents();
+            self.update();
             try self.ornament.render();
             if (self.viewport == null) {
                 self.viewport = try Viewport.init(&self.ornament);

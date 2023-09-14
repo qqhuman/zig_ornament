@@ -33,6 +33,7 @@ pub const Bvh = struct {
             .transforms = std.ArrayList(wgsl_structs.Transform).init(allocator),
             .materials = std.ArrayList(wgsl_structs.Material).init(allocator),
         };
+        std.log.debug("[ornament] bvh building.", .{});
         try build(allocator, &self, scene);
         const tlas_nodes = (scene.spheres.items.len + scene.meshes.items.len + scene.mesh_instances.items.len) * 2 - 1;
         var blas_nodes: usize = 0;

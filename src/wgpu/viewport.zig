@@ -44,7 +44,7 @@ pub const Viewport = struct {
             [2]u32{ resolution.width, resolution.height },
         );
 
-        const pipeline = blk: {
+        const pipeline = ppl: {
             var targets = [_]wgpu.ColorTargetState{.{
                 .format = .bgra8_unorm,
                 .blend = &.{
@@ -84,7 +84,7 @@ pub const Viewport = struct {
             });
             defer pipeline_layout.release();
 
-            break :blk .{
+            break :ppl .{
                 .bind_group = bind_group,
                 .render_pipeline = ornament_ctx.wgpu_context.device.createRenderPipeline(.{
                     .label = "[ornament] wgpu viewport render pipeline",
@@ -125,29 +125,34 @@ pub const Viewport = struct {
 
     pub fn render(self: *Self) !void {
         const next_texture = self.swap_chain.getCurrentTextureView();
+        defer next_texture.release();
+
         const commnad_encoder = self.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
         defer commnad_encoder.release();
+        {
+            const color_attachments = [_]wgpu.RenderPassColorAttachment{.{
+                .view = next_texture,
+                .load_op = .clear,
+                .store_op = .store,
+                .clear_value = .{ .r = 0.9, .g = 0.1, .b = 0.2, .a = 1.0 },
+            }};
+            const render_pass = commnad_encoder.beginRenderPass(.{
+                .label = "[ornament] wgpu viewport render pass",
+                .color_attachment_count = color_attachments.len,
+                .color_attachments = &color_attachments,
+            });
+            defer {
+                render_pass.end();
+                render_pass.release();
+            }
+            render_pass.setPipeline(self.pipeline.render_pipeline);
+            render_pass.setBindGroup(0, self.pipeline.bind_group, null);
+            render_pass.draw(3, 1, 0, 0);
+        }
 
-        const color_attachments = [_]wgpu.RenderPassColorAttachment{.{
-            .view = next_texture,
-            .load_op = .clear,
-            .store_op = .store,
-            .clear_value = .{ .r = 0.9, .g = 0.1, .b = 0.2, .a = 1.0 },
-        }};
-        const render_pass = commnad_encoder.beginRenderPass(.{
-            .label = "[ornament] wgpu viewport render pass",
-            .color_attachment_count = color_attachments.len,
-            .color_attachments = &color_attachments,
-        });
-        render_pass.setPipeline(self.pipeline.render_pipeline);
-        render_pass.setBindGroup(0, self.pipeline.bind_group, null);
-        render_pass.draw(3, 1, 0, 0);
-        render_pass.end();
-        next_texture.release();
         const command = commnad_encoder.finish(.{ .label = "[ornament] wgpu viewport command buffer" });
         defer command.release();
-        const commands = [_]wgpu.CommandBuffer{command};
-        self.queue.submit(&commands);
+        self.queue.submit(&[_]wgpu.CommandBuffer{command});
         self.swap_chain.present();
     }
 };
