@@ -158,7 +158,7 @@ pub fn init_spheres_and_3_lucy(ornament_context: *ornament.Context, aspect_ratio
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
     const vup = zmath.f32x4(0.0, 1.0, 0.0, 0.0);
-    const aperture = 0.1;
+    const aperture = 0.0;
     const focus_dist = 10.0;
     ornament_context.scene.camera = ornament.Camera.init(
         lookfrom,

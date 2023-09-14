@@ -90,12 +90,48 @@ const App = struct {
     }
 
     pub fn update(self: *Self) void {
-        _ = self;
-        // const target = self.ornament.scene.camera.getLookAt();
-        // var eye = self.ornament.scene.camera.getLookFrom();
-        // const up = self.ornament.scene.camera.getVUp();
-        // const forward = target - eye;
-        // const forward_mag =
+        // WSDA
+        {
+            const w_pressed = self.window.getKey(.w) == .press;
+            const s_pressed = self.window.getKey(.s) == .press;
+            const d_pressed = self.window.getKey(.d) == .press;
+            const a_pressed = self.window.getKey(.a) == .press;
+
+            if (w_pressed or s_pressed or d_pressed or a_pressed) {
+                const speed = zmath.f32x4s(0.7);
+                const target = self.ornament.scene.camera.getLookAt();
+                var eye = self.ornament.scene.camera.getLookFrom();
+                const up = self.ornament.scene.camera.getVUp();
+                var forward = target - eye;
+                const forward_norm = zmath.normalize3(forward);
+                var forward_mag = zmath.length3(forward);
+
+                if (w_pressed and forward_mag[0] > speed[0]) {
+                    eye += forward_norm * speed;
+                }
+
+                if (s_pressed) {
+                    eye -= forward_norm * speed;
+                }
+
+                const right = zmath.cross3(forward_norm, up);
+                // Redo radius calc in case the fowrard/backward is pressed.
+                forward = target - eye;
+                forward_mag = zmath.length3(forward);
+
+                if (d_pressed) {
+                    // Rescale the distance between the target and eye so
+                    // that it doesn't change. The eye therefore still
+                    // lies on the circle made by the target and eye.
+                    eye = target - zmath.normalize3((forward - right * speed)) * forward_mag;
+                }
+
+                if (a_pressed) {
+                    eye = target - zmath.normalize3((forward + right * speed)) * forward_mag;
+                }
+                self.ornament.scene.camera.setLookAt(eye, target, up);
+            }
+        }
     }
 
     pub fn renderLoop(self: *Self) !void {
