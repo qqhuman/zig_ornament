@@ -40,10 +40,10 @@ pub const Camera = struct {
         const v = zmath.cross3(w, u);
 
         const origin = lookfrom;
-        const horizontal = zmath.splat(zmath.Vec, focus_dist * viewport_width) * u;
-        const vertical = zmath.splat(zmath.Vec, focus_dist * viewport_height) * v;
+        const horizontal = zmath.f32x4s(focus_dist * viewport_width) * u;
+        const vertical = zmath.f32x4s(focus_dist * viewport_height) * v;
         const lower_left_corner =
-            origin - horizontal / zmath.splat(zmath.Vec, 2.0) - vertical / zmath.splat(zmath.Vec, 2.0) - zmath.splat(zmath.Vec, focus_dist) * w;
+            origin - horizontal / zmath.f32x4s(2.0) - vertical / zmath.f32x4s(2.0) - zmath.f32x4s(focus_dist) * w;
 
         const lens_radius = aperture / 2.0;
         return .{

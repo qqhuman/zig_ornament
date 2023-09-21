@@ -226,6 +226,142 @@ pub fn init_spheres_and_3_lucy(ornament_context: *ornament.Context, aspect_ratio
     }
 }
 
+pub fn quadCenterFromBook(q: zmath.Vec, u: zmath.Vec, v: zmath.Vec) zmath.Vec {
+    return q + u * zmath.f32x4s(0.5) + v * zmath.f32x4s(0.5);
+}
+
+pub fn init_empty_cornell_box(ornament_context: *ornament.Context, aspect_ratio: f32) !void {
+    const vfov = 40.0;
+    const lookfrom = zmath.f32x4(278.0, 278.0, -800.0, 1.0);
+    const lookat = zmath.f32x4(278.0, 278.0, 0.0, 1.0);
+    const vup = zmath.f32x4(0.0, 1.0, 0.0, 0.0);
+    const aperture = 0.0;
+    const focus_dist = 10.0;
+    ornament_context.scene.camera = ornament.Camera.init(
+        lookfrom,
+        lookat,
+        vup,
+        aspect_ratio,
+        vfov,
+        aperture,
+        focus_dist,
+    );
+
+    var red = try ornament_context.lambertian(zmath.f32x4(0.65, 0.05, 0.05, 0.0));
+    var white = try ornament_context.lambertian(zmath.f32x4(0.73, 0.73, 0.73, 0.0));
+    var green = try ornament_context.lambertian(zmath.f32x4(0.12, 0.45, 0.15, 0.0));
+    var light = try ornament_context.diffuseLight(zmath.f32x4(15.0, 15.0, 15.0, 0.0));
+
+    const unit_x = zmath.f32x4(1.0, 0.0, 0.0, 0.0);
+    const unit_y = zmath.f32x4(0.0, 1.0, 0.0, 0.0);
+    const unit_z = zmath.f32x4(0.0, 0.0, 1.0, 0.0);
+
+    try ornament_context.scene.addMesh(try ornament_context.createPlaneMesh(
+        quadCenterFromBook(
+            zmath.f32x4(555.0, 0.0, 0.0, 1.0),
+            zmath.f32x4(0.0, 555.0, 0.0, 0.0),
+            zmath.f32x4(0.0, 0.0, 555.0, 0.0),
+        ),
+        555.0,
+        555.0,
+        unit_x,
+        green,
+    ));
+
+    try ornament_context.scene.addMesh(try ornament_context.createPlaneMesh(
+        quadCenterFromBook(
+            zmath.f32x4(0.0, 0.0, 0.0, 1.0),
+            zmath.f32x4(0.0, 555.0, 0.0, 0.0),
+            zmath.f32x4(0.0, 0.0, 555.0, 0.0),
+        ),
+        555.0,
+        555.0,
+        zmath.f32x4s(-1.0) * unit_x,
+        red,
+    ));
+
+    try ornament_context.scene.addMesh(try ornament_context.createPlaneMesh(
+        quadCenterFromBook(
+            zmath.f32x4(343.0, 554.0, 332.0, 1.0),
+            zmath.f32x4(-130.0, 0.0, 0.0, 0.0),
+            zmath.f32x4(0.0, 0.0, -105.0, 0.0),
+        ),
+        130.0,
+        105.0,
+        zmath.f32x4s(-1.0) * unit_y,
+        light,
+    ));
+
+    try ornament_context.scene.addMesh(try ornament_context.createPlaneMesh(
+        quadCenterFromBook(
+            zmath.f32x4(0.0, 0.0, 0.0, 1.0),
+            zmath.f32x4(555.0, 0.0, 0.0, 0.0),
+            zmath.f32x4(0.0, 0.0, 555.0, 0.0),
+        ),
+        555.0,
+        555.0,
+        unit_y,
+        white,
+    ));
+
+    try ornament_context.scene.addMesh(try ornament_context.createPlaneMesh(
+        quadCenterFromBook(
+            zmath.f32x4(555.0, 555.0, 555, 1.0),
+            zmath.f32x4(-555.0, 0.0, 0.0, 0.0),
+            zmath.f32x4(0.0, 0.0, -555, 0.0),
+        ),
+        555.0,
+        555.0,
+        zmath.f32x4s(-1.0) * unit_y,
+        white,
+    ));
+
+    try ornament_context.scene.addMesh(try ornament_context.createPlaneMesh(
+        quadCenterFromBook(
+            zmath.f32x4(0.0, 0.0, 555.0, 1.0),
+            zmath.f32x4(555.0, 0.0, 0.0, 0.0),
+            zmath.f32x4(0.0, 555.0, 0.0, 0.0),
+        ),
+        555.0,
+        555.0,
+        unit_z,
+        white,
+    ));
+}
+
+pub fn init_cornell_box_with_lucy(ornament_context: *ornament.Context, aspect_ratio: f32) !void {
+    try init_empty_cornell_box(ornament_context, aspect_ratio);
+    var height: f32 = 400.0;
+    var mesh = try loadMesh(
+        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        ornament_context,
+        zmath.mul(
+            zmath.scalingV(zmath.f32x4s(height)),
+            zmath.mul(
+                zmath.rotationY(std.math.pi * 1.5),
+                zmath.translation(265.0 * 1.5, height / 2.0, 295.0),
+            ),
+        ),
+        //try ornament_context.lambertian(zmath.f32x4(0.4, 0.2, 0.1, 0.0)),
+        try ornament_context.metal(zmath.f32x4(0.7, 0.6, 0.5, 1.0), 0.0),
+    );
+    try ornament_context.scene.addMesh(mesh);
+
+    height = 200.0;
+    try ornament_context.scene.addMeshInstance(try ornament_context.createMeshInstance(
+        mesh,
+        zmath.mul(
+            zmath.scalingV(zmath.f32x4s(height)),
+            zmath.mul(
+                zmath.rotationY(std.math.pi * 1.25),
+                zmath.translation(130.0 * 1.5, height / 2.0, 65.0),
+            ),
+        ),
+        //try ornament_context.lambertian(zmath.f32x4(0.4, 0.2, 0.1, 0.0)),
+        try ornament_context.dielectric(1.5),
+    ));
+}
+
 pub fn loadMesh(path: [:0]const u8, ornament_context: *ornament.Context, transform: zmath.Mat, material: *ornament.Material) !*ornament.Mesh {
     const scene = c.aiImportFile(
         path,

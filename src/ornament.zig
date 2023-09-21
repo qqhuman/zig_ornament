@@ -2,6 +2,7 @@ const std = @import("std");
 const wgpu = @import("zgpu").wgpu;
 const zmath = @import("zmath");
 const util = @import("util.zig");
+const math = @import("math.zig");
 const WgpuContext = @import("wgpu/wgpu_context.zig").WgpuContext;
 const PathTracer = @import("wgpu/path_tracer.zig").PathTracer;
 const materials = @import("materials/material.zig");
@@ -185,7 +186,6 @@ pub const Context = struct {
                 .albedo = albedo,
                 .materia_type = 3,
 
-                .albedo = undefined,
                 .fuzz = undefined,
                 .ior = undefined,
                 .material_index = null,
@@ -302,12 +302,38 @@ pub const Context = struct {
         );
     }
 
+    pub fn createPlaneMesh(self: *Self, center: zmath.Vec, side1_length: f32, side2_length: f32, normal: zmath.Vec, material: *Material) std.mem.Allocator.Error!*Mesh {
+        const vertices = [_]zmath.Vec{
+            zmath.f32x4(-0.5, 0.0, -0.5, 1.0),
+            zmath.f32x4(-0.5, 0.0, 0.5, 1.0),
+            zmath.f32x4(0.5, 0.0, 0.5, 1.0),
+            zmath.f32x4(0.5, 0.0, -0.5, 1.0),
+        };
+        const indices = [_]u32{ 3, 1, 0, 2, 1, 3 };
+        const normals = [_]zmath.Vec{ math.unit_y, math.unit_y, math.unit_y, math.unit_y };
+        const rotation = math.rotationBetweenVectors(normal, math.unit_y);
+        return self.createMesh(
+            vertices[0..],
+            indices[0..],
+            normals[0..],
+            indices[0..],
+            zmath.mul(
+                zmath.mul(
+                    zmath.scaling(side1_length, 1.0, side2_length),
+                    rotation,
+                ),
+                zmath.translationV(center),
+            ),
+            material,
+        );
+    }
+
     pub fn createMesh(
         self: *Self,
-        vertices: []zmath.Vec,
-        vertex_indices: []u32,
-        normals: []zmath.Vec,
-        normal_indices: []u32,
+        vertices: []const zmath.Vec,
+        vertex_indices: []const u32,
+        normals: []const zmath.Vec,
+        normal_indices: []const u32,
         transform: zmath.Mat,
         material: *Material,
     ) std.mem.Allocator.Error!*Mesh {
