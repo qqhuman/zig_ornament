@@ -24,40 +24,42 @@ pub const Bvh = struct {
     normal_indices: std.ArrayList(u32),
     transforms: std.ArrayList(wgsl_structs.Transform),
     materials: std.ArrayList(wgsl_structs.Material),
+    textures: std.ArrayList(*ornament.Texture),
 
-    pub fn init(allocator: std.mem.Allocator, scene: *const Scene) std.mem.Allocator.Error!Self {
-        var self = Self{
-            .nodes = std.ArrayList(wgsl_structs.Node).init(allocator),
-            .normals = std.ArrayList(wgsl_structs.Normal).init(allocator),
-            .normal_indices = std.ArrayList(u32).init(allocator),
-            .transforms = std.ArrayList(wgsl_structs.Transform).init(allocator),
-            .materials = std.ArrayList(wgsl_structs.Material).init(allocator),
-        };
-        std.log.debug("[ornament] bvh building.", .{});
-        try build(allocator, &self, scene);
-        const tlas_nodes = (scene.spheres.items.len + scene.meshes.items.len + scene.mesh_instances.items.len) * 2 - 1;
+    pub fn init(allocator: std.mem.Allocator, ornament_ctx: *const ornament.Context) std.mem.Allocator.Error!Self {
+        const shapes_count = ornament_ctx.scene.spheres.items.len + ornament_ctx.scene.meshes.items.len + ornament_ctx.scene.mesh_instances.items.len;
+        if (shapes_count == 0) {
+            @panic("[ornament] scene cannot be empty.");
+        }
+        const tlas_nodes = shapes_count * 2 - 1;
         var blas_nodes: usize = 0;
-        for (scene.meshes.items) |m| {
+        var normals_count: usize = 0;
+        var normal_indices_count: usize = 0;
+        for (ornament_ctx.scene.meshes.items) |m| {
             const triangles = m.vertex_indices.items.len / 3;
             blas_nodes += triangles * 2 - 1;
+            normals_count += m.normals.items.len;
+            normal_indices_count += m.normal_indices.items.len;
         }
         const expected_nodes = tlas_nodes + blas_nodes;
-        std.log.debug("[ornament] spheres: {d}", .{scene.spheres.items.len});
-        std.log.debug("[ornament] meshes: {d}", .{scene.meshes.items.len});
-        std.log.debug("[ornament] mesh_instances: {d}", .{scene.mesh_instances.items.len});
+        var self = Self{
+            .nodes = try std.ArrayList(wgsl_structs.Node).initCapacity(allocator, expected_nodes),
+            .normals = try std.ArrayList(wgsl_structs.Normal).initCapacity(allocator, normals_count),
+            .normal_indices = try std.ArrayList(u32).initCapacity(allocator, normal_indices_count),
+            .transforms = try std.ArrayList(wgsl_structs.Transform).initCapacity(allocator, shapes_count),
+            .materials = try std.ArrayList(wgsl_structs.Material).initCapacity(allocator, ornament_ctx.materials.items.len),
+            .textures = try std.ArrayList(*ornament.Texture).initCapacity(allocator, ornament_ctx.textures.items.len),
+        };
+        std.log.debug("[ornament] bvh building.", .{});
+        try build(allocator, &self, &ornament_ctx.scene);
+        std.log.debug("[ornament] spheres: {d}", .{ornament_ctx.scene.spheres.items.len});
+        std.log.debug("[ornament] meshes: {d}", .{ornament_ctx.scene.meshes.items.len});
+        std.log.debug("[ornament] mesh_instances: {d}", .{ornament_ctx.scene.mesh_instances.items.len});
         std.log.debug("[ornament] expected bvh.nodes (tlas_nodes): {d}", .{tlas_nodes});
         std.log.debug("[ornament] expected bvh.nodes (blas_nodes): {d}", .{blas_nodes});
         std.log.debug("[ornament] expected bvh.nodes (tlas_nodes + blas_nodes): {d}", .{expected_nodes});
         std.log.debug("[ornament] actual bvh.nodes: {d}", .{self.nodes.items.len});
         std.debug.assert(expected_nodes == self.nodes.items.len);
-
-        if (self.normals.items.len == 0) {
-            try self.normals.append(undefined);
-        }
-
-        if (self.normal_indices.items.len == 0) {
-            try self.normal_indices.append(undefined);
-        }
 
         return self;
     }
@@ -68,6 +70,7 @@ pub const Bvh = struct {
         self.normal_indices.deinit();
         self.transforms.deinit();
         self.materials.deinit();
+        self.textures.deinit();
     }
 
     fn build(allocator: std.mem.Allocator, bvh: *Bvh, scene: *const Scene) std.mem.Allocator.Error!void {
@@ -315,6 +318,13 @@ fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_r
 
 fn getMaterialIndex(bvh: *Bvh, material: *Material) std.mem.Allocator.Error!u32 {
     return material.material_index orelse {
+        switch (material.albedo) {
+            .texture => |texture| {
+                try bvh.textures.append(texture);
+                texture.texture_id = @as(u32, @truncate(bvh.textures.items.len - 1));
+            },
+            else => {},
+        }
         try bvh.materials.append(wgsl_structs.Material.from(material));
         const material_id = @as(u32, @truncate(bvh.materials.items.len - 1));
         material.material_index = material_id;

@@ -3,6 +3,7 @@ const zmath = @import("libs/zig-gamedev/libs/zmath/build.zig");
 const zgpu = @import("libs/zig-gamedev/libs/zgpu/build.zig");
 const zpool = @import("libs/zig-gamedev/libs/zpool/build.zig");
 const zglfw = @import("libs/zig-gamedev/libs/zglfw/build.zig");
+const zstbi = @import("libs/zig-gamedev/libs/zstbi/build.zig");
 
 pub fn build(b: *std.Build) void {
     const target = std.zig.CrossTarget{ .os_tag = .windows, .cpu_arch = .x86_64 };
@@ -24,9 +25,12 @@ pub fn build(b: *std.Build) void {
     const zglfw_pkg = zglfw.package(b, target, optimize, .{});
     const zpool_pkg = zpool.package(b, target, optimize, .{});
     const zgpu_pkg = zgpu.package(b, target, optimize, .{ .deps = .{ .zpool = zpool_pkg.zpool, .zglfw = zglfw_pkg.zglfw } });
+    const zstbi_pkg = zstbi.package(b, target, optimize, .{});
+
     zmath_pkg.link(exe);
     zgpu_pkg.link(exe);
     zglfw_pkg.link(exe);
+    zstbi_pkg.link(exe);
 
     b.installArtifact(exe);
 

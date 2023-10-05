@@ -1,6 +1,7 @@
 const std = @import("std");
 const zmath = @import("zmath");
 const zglfw = @import("zglfw");
+const zstbi = @import("zstbi");
 const wgpu = @import("zgpu").wgpu;
 const util = @import("../util.zig");
 const ornament = @import("../ornament.zig");
@@ -31,6 +32,7 @@ const App = struct {
 
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_example] init", .{});
+        zstbi.init(allocator);
         try zglfw.init();
 
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
@@ -50,7 +52,7 @@ const App = struct {
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
-        try @import("examples.zig").init_cornell_box_with_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_spheres_and_textures(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
         const viewport = try Viewport.init(&ornament_context);
         return .{
@@ -67,6 +69,7 @@ const App = struct {
         self.ornament.deinit();
         self.window.destroy();
         zglfw.terminate();
+        zstbi.deinit();
     }
 
     pub fn setUpCallbacks(self: *Self) void {

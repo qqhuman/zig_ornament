@@ -1,5 +1,7 @@
 const std = @import("std");
-const wgpu = @import("zgpu").wgpu;
+const ornament = @import("../ornament.zig");
+const zgpu = @import("zgpu");
+const wgpu = zgpu.wgpu;
 const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 const util = @import("../util.zig");
 const wgsl_structs = @import("wgsl_structs.zig");
@@ -75,11 +77,12 @@ pub fn Storage(comptime T: type) type {
             }
 
             const label = "[ornament] []" ++ @typeName(T) ++ " storage";
-            const padded_size_in_bytes = switch (init_data) {
-                .element_count => |count| paddedBufferSize(count * @sizeOf(T)),
-                .data => |data| paddedBufferSize(data.len * @sizeOf(T)),
+            const count = switch (init_data) {
+                .element_count => |count| count,
+                .data => |data| data.len,
             };
-
+            // storage cannot be empty so we allocate at least one element
+            const padded_size_in_bytes = paddedBufferSize(@max(count, 1) * @sizeOf(T));
             const handle = switch (init_data) {
                 .element_count => device.createBuffer(.{
                     .label = label,
@@ -90,13 +93,14 @@ pub fn Storage(comptime T: type) type {
                     const handle = device.createBuffer(.{
                         .label = label,
                         .usage = usage,
-                        .mapped_at_creation = true,
+                        .mapped_at_creation = data.len > 0,
                         .size = padded_size_in_bytes,
                     });
 
-                    var dst = handle.getMappedRange(T, 0, data.len) orelse unreachable;
-                    std.mem.copy(T, dst, data);
-                    handle.unmap();
+                    if (handle.getMappedRange(T, 0, data.len)) |dst| {
+                        std.mem.copy(T, dst, data);
+                        handle.unmap();
+                    }
 
                     break :blk handle;
                 },
@@ -168,3 +172,37 @@ pub fn Uniform(comptime T: type) type {
         }
     };
 }
+
+pub const Texture = struct {
+    const Self = @This();
+    txt: wgpu.Texture,
+    txtv: wgpu.TextureView,
+
+    pub fn init(device: wgpu.Device, texture: *ornament.Texture) Self {
+        _ = texture;
+        _ = device;
+        @panic("TODO");
+        // return .{
+        //     .txt = device.createTexture(.{
+        //         .usage = .{ .texture_binding = true, .copy_dst = true },
+        //         .size = .{
+        //             .width = texture.width,
+        //             .height = texture.height,
+        //             .depth_or_array_layers = 1,
+        //         },
+        //         .format = zgpu.imageInfoToTextureFormat(
+        //             texture.num_components,
+        //             texture.bytes_per_component,
+        //             texture.is_hdr,
+        //         ),
+        //         .mip_level_count = 1,
+        //     }),
+        //     .txtv = null,
+        // };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.txtv.release();
+        self.txt.release();
+    }
+};

@@ -1,5 +1,6 @@
 struct Material {
-    albedo: vec3<f32>,
+    albedo_vec: vec3<f32>,
+    albedo_texture_index: u32,
     fuzz: f32,
     ior: f32,
     material_type: u32
@@ -14,14 +15,14 @@ fn lambertian_scatter(material: Material, r_in: Ray, rec: HitRecord, attenuation
     }
 
     (*scattered) = Ray(rec.p, scatter_direction);
-    (*attenuation) = material.albedo;
+    (*attenuation) = material.albedo_vec;
     return true;
 }
 
 fn metal_scatter(material: Material, r_in: Ray, rec: HitRecord, attenuation: ptr<function, vec3<f32>>, scattered: ptr<function, Ray>) -> bool {
     let scattered_direction = reflect(normalize(r_in.direction), rec.normal) + material.fuzz * random_in_unit_sphere();
     (*scattered) = Ray(rec.p, scattered_direction);
-    (*attenuation) = material.albedo;
+    (*attenuation) = material.albedo_vec;
     return (dot(scattered_direction, rec.normal) > 0.0);
 }
 
@@ -79,7 +80,7 @@ fn material_emit(rec: HitRecord) -> vec3<f32> {
     let material = materials[rec.material_index];
     switch material.material_type {
         case 3u {
-            return material.albedo;
+            return material.albedo_vec;
         }
         default {
             return vec3<f32>(0.0);

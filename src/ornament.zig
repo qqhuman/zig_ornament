@@ -7,6 +7,8 @@ const WgpuContext = @import("wgpu/wgpu_context.zig").WgpuContext;
 const PathTracer = @import("wgpu/path_tracer.zig").PathTracer;
 const materials = @import("materials/material.zig");
 pub const Material = materials.Material;
+pub const Texture = @import("materials/texture.zig").Texture;
+pub const Color = @import("materials/color.zig").Color;
 const geometry = @import("geometry/geometry.zig");
 pub const Scene = geometry.Scene;
 pub const Camera = geometry.Camera;
@@ -24,6 +26,7 @@ pub const Context = struct {
     spheres: std.ArrayList(*Sphere),
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
+    textures: std.ArrayList(*Texture),
     path_tracer: ?PathTracer,
     wgpu_context: WgpuContext,
 
@@ -36,6 +39,7 @@ pub const Context = struct {
             .spheres = std.ArrayList(*Sphere).init(allocator),
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
+            .textures = std.ArrayList(*Texture).init(allocator),
             .wgpu_context = try WgpuContext.init(surface_descriptor),
             .path_tracer = null,
         };
@@ -49,6 +53,8 @@ pub const Context = struct {
         self.destroyElements(&self.meshes);
         self.destroyElements(&self.mesh_instances);
         self.destroyElements(&self.materials);
+        for (self.textures.items) |t| t.deinit();
+        self.destroyElements(&self.textures);
         self.wgpu_context.deinit();
     }
 
@@ -105,7 +111,7 @@ pub const Context = struct {
 
     fn getOrCreatePathTracer(self: *Self) !*PathTracer {
         if (self.path_tracer == null) {
-            var pt = try PathTracer.init(self.allocator, self.wgpu_context.device, self.wgpu_context.queue, &self.state, &self.scene);
+            var pt = try PathTracer.init(self.allocator, self.wgpu_context.device, self.wgpu_context.queue, self);
             self.path_tracer = pt;
             std.log.debug("[ornament] path tracer was created", .{});
         }
@@ -138,7 +144,7 @@ pub const Context = struct {
         }
     }
 
-    pub fn lambertian(self: *Self, albedo: zmath.Vec) std.mem.Allocator.Error!*Material {
+    pub fn lambertian(self: *Self, albedo: Color) std.mem.Allocator.Error!*Material {
         var material = try self.allocator.create(Material);
         material.* = Material{
             .albedo = albedo,
@@ -152,7 +158,7 @@ pub const Context = struct {
         return material;
     }
 
-    pub fn metal(self: *Self, albedo: zmath.Vec, fuzz: f32) std.mem.Allocator.Error!*Material {
+    pub fn metal(self: *Self, albedo: Color, fuzz: f32) std.mem.Allocator.Error!*Material {
         var material = try self.allocator.create(Material);
         material.* = Material{
             .albedo = albedo,
@@ -180,7 +186,7 @@ pub const Context = struct {
         return material;
     }
 
-    pub fn diffuseLight(self: *Self, albedo: zmath.Vec) std.mem.Allocator.Error!*Material {
+    pub fn diffuseLight(self: *Self, albedo: Color) std.mem.Allocator.Error!*Material {
         return self.addElement(
             Material{
                 .albedo = albedo,
@@ -390,6 +396,19 @@ pub const Context = struct {
 
     pub fn releaseMeshInstance(self: *Self, mesh_instance: *const MeshInstance) void {
         self.releaseElement(mesh_instance, self.mesh_instances);
+    }
+
+    pub fn createTexture(self: *Self, data: []u8, width: u32, height: u32, num_components: u32, bytes_per_component: u32, is_hdr: bool, gamma: f32) !*Texture {
+        return self.addElement(try Texture.init(
+            self.allocator,
+            data,
+            width,
+            height,
+            num_components,
+            bytes_per_component,
+            is_hdr,
+            gamma,
+        ), &self.textures);
     }
 
     fn addElement(self: *Self, to_add: anytype, list: *std.ArrayList(*@TypeOf(to_add))) std.mem.Allocator.Error!*@TypeOf(to_add) {

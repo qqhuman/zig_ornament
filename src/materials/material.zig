@@ -1,7 +1,8 @@
-const zmath = @import("zmath");
+const std = @import("std");
+const Color = @import("color.zig").Color;
 
 pub const Material = struct {
-    albedo: zmath.Vec,
+    albedo: Color,
     fuzz: f32,
     ior: f32,
     materia_type: u32,

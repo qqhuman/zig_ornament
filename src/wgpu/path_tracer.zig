@@ -31,14 +31,14 @@ pub const PathTracer = struct {
     shader_module: wgpu.ShaderModule,
     pipelines: ?WgpuPipelines,
 
-    pub fn init(allocator: std.mem.Allocator, device: wgpu.Device, queue: wgpu.Queue, state: *const ornament.State, scene: *const ornament.Scene) !Self {
-        const bvh = try Bvh.init(allocator, scene);
-        const resolution = state.getResolution();
+    pub fn init(allocator: std.mem.Allocator, device: wgpu.Device, queue: wgpu.Queue, ornament_ctx: *const ornament.Context) !Self {
+        const bvh = try Bvh.init(allocator, ornament_ctx);
+        const resolution = ornament_ctx.state.getResolution();
 
         const dynamic_state = wgsl_structs.DynamicState{};
         const dynamic_state_buffer = buffers.Uniform(wgsl_structs.DynamicState).init(device, false, dynamic_state);
-        const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(state));
-        const camera_buffer = buffers.Uniform(wgsl_structs.Camera).init(device, false, wgsl_structs.Camera.from(&scene.camera));
+        const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(&ornament_ctx.state));
+        const camera_buffer = buffers.Uniform(wgsl_structs.Camera).init(device, false, wgsl_structs.Camera.from(&ornament_ctx.scene.camera));
 
         const materials_buffer = buffers.Storage(wgsl_structs.Material).init(device, false, .{ .data = bvh.materials.items });
         const normals_buffer = buffers.Storage(wgsl_structs.Normal).init(device, false, .{ .data = bvh.normals.items });

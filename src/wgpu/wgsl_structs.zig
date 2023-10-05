@@ -1,3 +1,4 @@
+const std = @import("std");
 const zmath = @import("zmath");
 const ornament = @import("../ornament.zig");
 
@@ -6,7 +7,6 @@ pub const Resolution = [2]u32;
 pub const Point3 = [3]f32;
 pub const Vector3 = [3]f32;
 pub const Vector4 = [TARGET_PIXEL_COMPONENTS]f32;
-pub const Color = [3]f32;
 pub const Normal = [4]f32; // 4th byte is padding
 pub const Transform = zmath.Mat;
 
@@ -23,15 +23,25 @@ pub const Node = extern struct {
 
 pub const Material = extern struct {
     const Self = @This();
-    albedo: [3]f32,
+    albedo_vec: [3]f32,
+    albedo_texture_index: u32,
     fuzz: f32,
     ior: f32,
     materia_type: u32,
-    _padding: [2]u32 = undefined,
+    _padding: u32 = undefined,
 
     pub fn from(material: *const ornament.Material) Self {
+        var albedo_vec = zmath.f32x4(1.0, 0.0, 1.0, 1.0);
+        var albedo_texture_index: u32 = std.math.maxInt(u32);
+
+        switch (material.albedo) {
+            .vec => |v| albedo_vec = v,
+            .texture => |_| unreachable,
+        }
+
         return .{
-            .albedo = zmath.vecToArr3(material.albedo),
+            .albedo_vec = zmath.vecToArr3(albedo_vec),
+            .albedo_texture_index = albedo_texture_index,
             .fuzz = material.fuzz,
             .ior = material.ior,
             .materia_type = material.materia_type,
