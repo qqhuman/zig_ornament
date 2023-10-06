@@ -2,7 +2,7 @@ const std = @import("std");
 const zmath = @import("zmath");
 const zglfw = @import("zglfw");
 const zstbi = @import("zstbi");
-const wgpu = @import("zgpu").wgpu;
+const webgpu = @import("../wgpu/webgpu.zig");
 const util = @import("../util.zig");
 const ornament = @import("../ornament.zig");
 const Viewport = @import("../wgpu/viewport.zig").Viewport;
@@ -38,7 +38,7 @@ const App = struct {
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
         const window = try zglfw.Window.create(WIDTH, HEIGHT, TITLE, null);
 
-        var surface_descriptor_from_windows = wgpu.SurfaceDescriptorFromWindowsHWND{
+        var surface_descriptor_from_windows = webgpu.SurfaceDescriptorFromWindowsHWND{
             .chain = .{ .next = null, .struct_type = .surface_descriptor_from_windows_hwnd },
             .hwnd = try zglfw.native.getWin32Window(window),
             .hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable,
@@ -52,7 +52,7 @@ const App = struct {
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
-        try @import("examples.zig").init_spheres_and_textures(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_spheres_and_3_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
         const viewport = try Viewport.init(&ornament_context);
         return .{

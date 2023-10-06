@@ -1,5 +1,5 @@
 const std = @import("std");
-const wgpu = @import("zgpu").wgpu;
+const webgpu = @import("wgpu/webgpu.zig");
 const zmath = @import("zmath");
 const util = @import("util.zig");
 const math = @import("math.zig");
@@ -30,7 +30,7 @@ pub const Context = struct {
     path_tracer: ?PathTracer,
     wgpu_context: WgpuContext,
 
-    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu.SurfaceDescriptor) !Self {
+    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
         return .{
             .allocator = allocator,
             .state = State.init(),
@@ -119,12 +119,12 @@ pub const Context = struct {
         return &self.path_tracer.?;
     }
 
-    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
+    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: webgpu.ShaderStage, read_only: bool) !webgpu.BindGroupLayoutEntry {
         var path_tracer = try self.getOrCreatePathTracer();
         return path_tracer.targetBufferLayout(binding, visibility, read_only);
     }
 
-    pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu.BindGroupEntry {
+    pub fn targetBufferBinding(self: *Self, binding: u32) !webgpu.BindGroupEntry {
         var path_tracer = try self.getOrCreatePathTracer();
         return path_tracer.targetBufferBinding(binding);
     }

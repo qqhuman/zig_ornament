@@ -119,10 +119,10 @@ pub fn init_spheres_and_textures(ornament_ctx: *ornament.Context, aspect_ratio: 
     ));
 
     {
-        var image = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\earthmap.jpg", 4);
-        defer image.deinit();
-        var texture = try ornament_ctx.createTexture(image.data, image.width, image.height, image.num_components, image.bytes_per_component, false, 1.0);
-        _ = texture;
+        // var image = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\earthmap.jpg", 4);
+        // defer image.deinit();
+        // var texture = try ornament_ctx.createTexture(image.data, image.width, image.height, image.num_components, image.bytes_per_component, false, 1.0);
+        // _ = texture;
 
         try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
             zmath.f32x4(-4.0, 1.0, 0.0, 1.0),

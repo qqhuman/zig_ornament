@@ -8,7 +8,7 @@ pub const Point3 = [3]f32;
 pub const Vector3 = [3]f32;
 pub const Vector4 = [TARGET_PIXEL_COMPONENTS]f32;
 pub const Normal = [4]f32; // 4th byte is padding
-pub const Transform = zmath.Mat;
+pub const Transform = [16]f32;
 
 pub const Node = extern struct {
     left_aabb_min_or_v0: [3]f32,

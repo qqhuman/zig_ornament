@@ -276,7 +276,7 @@ fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isn
 }
 
 fn appendTransform(bvh: *Bvh, transform: zmath.Mat) !void {
-    try bvh.transforms.append(transform);
+    try bvh.transforms.append(zmath.matToArr(transform));
 }
 
 fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_resolve: *std.AutoHashMap(u32, *const MeshInstance)) std.mem.Allocator.Error!wgsl_structs.Node {

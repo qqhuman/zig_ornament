@@ -1,5 +1,5 @@
 const std = @import("std");
-const wgpu = @import("zgpu").wgpu;
+const webgpu = @import("webgpu.zig");
 const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 const wgsl_structs = @import("wgsl_structs.zig");
 const buffers = @import("buffers.zig");
@@ -10,8 +10,8 @@ const Bvh = @import("../bvh.zig").Bvh;
 pub const PathTracer = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
-    device: wgpu.Device,
-    queue: wgpu.Queue,
+    device: webgpu.Device,
+    queue: webgpu.Queue,
 
     resolution: util.Resolution,
     bvh: Bvh,
@@ -28,10 +28,10 @@ pub const PathTracer = struct {
     transforms_buffer: buffers.Storage(wgsl_structs.Transform),
     nodes_buffer: buffers.Storage(wgsl_structs.Node),
 
-    shader_module: wgpu.ShaderModule,
+    shader_module: webgpu.ShaderModule,
     pipelines: ?WgpuPipelines,
 
-    pub fn init(allocator: std.mem.Allocator, device: wgpu.Device, queue: wgpu.Queue, ornament_ctx: *const ornament.Context) !Self {
+    pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, queue: webgpu.Queue, ornament_ctx: *const ornament.Context) !Self {
         const bvh = try Bvh.init(allocator, ornament_ctx);
         const resolution = ornament_ctx.state.getResolution();
 
@@ -58,7 +58,7 @@ pub const PathTracer = struct {
             @embedFile("shaders/transform.wgsl") ++ "\n" ++
             @embedFile("shaders/utility.wgsl");
 
-        const wgsl_descriptor = wgpu.ShaderModuleWgslDescriptor{
+        const wgsl_descriptor = webgpu.ShaderModuleWgslDescriptor{
             .code = code,
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
@@ -107,12 +107,12 @@ pub const PathTracer = struct {
         if (self.pipelines) |*pipelines| pipelines.release();
     }
 
-    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu.ShaderStage, read_only: bool) !wgpu.BindGroupLayoutEntry {
+    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: webgpu.ShaderStage, read_only: bool) !webgpu.BindGroupLayoutEntry {
         const target = try self.getOrCreateTargetBuffer();
         return target.layout(binding, visibility, read_only);
     }
 
-    pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu.BindGroupEntry {
+    pub fn targetBufferBinding(self: *Self, binding: u32) !webgpu.BindGroupEntry {
         const target = try self.getOrCreateTargetBuffer();
         return target.binding(binding);
     }
@@ -135,12 +135,12 @@ pub const PathTracer = struct {
     fn getOrCreatePipelines(self: *Self) !WgpuPipelines {
         return self.pipelines orelse {
             const target_buffer = try self.getOrCreateTargetBuffer();
-            var bind_groups: [4]wgpu.BindGroup = undefined;
-            var bind_group_layouts: [4]wgpu.BindGroupLayout = undefined;
+            var bind_groups: [4]webgpu.BindGroup = undefined;
+            var bind_group_layouts: [4]webgpu.BindGroupLayout = undefined;
             defer for (bind_group_layouts) |bgl| bgl.release();
 
             {
-                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                const layout_entries = [_]webgpu.BindGroupLayoutEntry{
                     target_buffer.buffer.layout(0, .{ .compute = true }, false),
                     target_buffer.accumulation_buffer.layout(1, .{ .compute = true }, false),
                     target_buffer.rng_state_buffer.layout(2, .{ .compute = true }, false),
@@ -151,7 +151,7 @@ pub const PathTracer = struct {
                     .entries = &layout_entries,
                 });
 
-                const group_entries = [_]wgpu.BindGroupEntry{
+                const group_entries = [_]webgpu.BindGroupEntry{
                     target_buffer.buffer.binding(0),
                     target_buffer.accumulation_buffer.binding(1),
                     target_buffer.rng_state_buffer.binding(2),
@@ -167,7 +167,7 @@ pub const PathTracer = struct {
             }
 
             {
-                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                const layout_entries = [_]webgpu.BindGroupLayoutEntry{
                     self.dynamic_state_buffer.layout(0, .{ .compute = true }),
                     self.constant_state_buffer.layout(1, .{ .compute = true }),
                     self.camera_buffer.layout(2, .{ .compute = true }),
@@ -178,7 +178,7 @@ pub const PathTracer = struct {
                     .entries = &layout_entries,
                 });
 
-                const group_entries = [_]wgpu.BindGroupEntry{
+                const group_entries = [_]webgpu.BindGroupEntry{
                     self.dynamic_state_buffer.binding(0),
                     self.constant_state_buffer.binding(1),
                     self.camera_buffer.binding(2),
@@ -194,7 +194,7 @@ pub const PathTracer = struct {
             }
 
             {
-                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                const layout_entries = [_]webgpu.BindGroupLayoutEntry{
                     self.materials_buffer.layout(0, .{ .compute = true }, true),
                     self.nodes_buffer.layout(1, .{ .compute = true }, true),
                 };
@@ -204,7 +204,7 @@ pub const PathTracer = struct {
                     .entries = &layout_entries,
                 });
 
-                const group_entries = [_]wgpu.BindGroupEntry{
+                const group_entries = [_]webgpu.BindGroupEntry{
                     self.materials_buffer.binding(0),
                     self.nodes_buffer.binding(1),
                 };
@@ -219,7 +219,7 @@ pub const PathTracer = struct {
             }
 
             {
-                const layout_entries = [_]wgpu.BindGroupLayoutEntry{
+                const layout_entries = [_]webgpu.BindGroupLayoutEntry{
                     self.normals_buffer.layout(0, .{ .compute = true }, true),
                     self.normal_indices_buffer.layout(1, .{ .compute = true }, true),
                     self.transforms_buffer.layout(2, .{ .compute = true }, true),
@@ -230,7 +230,7 @@ pub const PathTracer = struct {
                     .entries = &layout_entries,
                 });
 
-                const group_entries = [_]wgpu.BindGroupEntry{
+                const group_entries = [_]webgpu.BindGroupEntry{
                     self.normals_buffer.binding(0),
                     self.normal_indices_buffer.binding(1),
                     self.transforms_buffer.binding(2),
@@ -311,12 +311,12 @@ pub const PathTracer = struct {
         self.dynamic_state_buffer.write(self.queue, self.dynamic_state);
     }
 
-    fn runPipeline(self: *Self, pipeline: wgpu.ComputePipeline, bind_groups: [4]wgpu.BindGroup, comptime pipeline_name: []const u8) !void {
+    fn runPipeline(self: *Self, pipeline: webgpu.ComputePipeline, bind_groups: [4]webgpu.BindGroup, comptime pipeline_name: []const u8) !void {
         const encoder = self.device.createCommandEncoder(.{ .label = "[ornament] " ++ pipeline_name ++ "command encoder" });
         defer encoder.release();
 
         {
-            const pass = encoder.beginComputePass(.{ .label = "[ornament] " ++ pipeline_name ++ " compute pass", .timestamp_write_count = 0, .timestamp_writes = null });
+            const pass = encoder.beginComputePass(.{ .label = "[ornament] " ++ pipeline_name ++ " compute pass" });
             defer {
                 pass.end();
                 pass.release();
@@ -332,8 +332,8 @@ pub const PathTracer = struct {
         const command = encoder.finish(.{ .label = "[ornament] " ++ pipeline_name ++ " command buffer" });
         defer command.release();
 
-        self.queue.submit(&[_]wgpu.CommandBuffer{command});
-        self.device.tick();
+        self.queue.submit(&[_]webgpu.CommandBuffer{command});
+        _ = @import("wgpu.zig").wgpuDevicePoll(self.device, true, null);
     }
 
     pub fn render(self: *Self) !void {
@@ -354,10 +354,10 @@ pub const PathTracer = struct {
 
 pub const WgpuPipelines = struct {
     pub const Self = @This();
-    path_tracing_pipeline: wgpu.ComputePipeline,
-    post_processing_pipeline: wgpu.ComputePipeline,
-    path_tracing_and_post_processing_pipeline: wgpu.ComputePipeline,
-    bind_groups: [4]wgpu.BindGroup,
+    path_tracing_pipeline: webgpu.ComputePipeline,
+    post_processing_pipeline: webgpu.ComputePipeline,
+    path_tracing_and_post_processing_pipeline: webgpu.ComputePipeline,
+    bind_groups: [4]webgpu.BindGroup,
 
     pub fn release(self: Self) void {
         self.path_tracing_pipeline.release();

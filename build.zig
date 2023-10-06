@@ -1,7 +1,5 @@
 const std = @import("std");
 const zmath = @import("libs/zig-gamedev/libs/zmath/build.zig");
-const zgpu = @import("libs/zig-gamedev/libs/zgpu/build.zig");
-const zpool = @import("libs/zig-gamedev/libs/zpool/build.zig");
 const zglfw = @import("libs/zig-gamedev/libs/zglfw/build.zig");
 const zstbi = @import("libs/zig-gamedev/libs/zstbi/build.zig");
 
@@ -21,14 +19,15 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibraryName("assimp-vc143-mt");
     b.installBinFile("libs/assimp/assimp-vc143-mt.dll", "assimp-vc143-mt.dll");
 
+    exe.addLibraryPath(std.Build.LazyPath.relative("libs/wgpu-native"));
+    exe.linkSystemLibraryName("wgpu_native.dll");
+    b.installBinFile("libs/wgpu-native/wgpu_native.dll", "wgpu_native.dll");
+
     const zmath_pkg = zmath.package(b, target, optimize, .{ .options = .{ .enable_cross_platform_determinism = true } });
     const zglfw_pkg = zglfw.package(b, target, optimize, .{});
-    const zpool_pkg = zpool.package(b, target, optimize, .{});
-    const zgpu_pkg = zgpu.package(b, target, optimize, .{ .deps = .{ .zpool = zpool_pkg.zpool, .zglfw = zglfw_pkg.zglfw } });
     const zstbi_pkg = zstbi.package(b, target, optimize, .{});
 
     zmath_pkg.link(exe);
-    zgpu_pkg.link(exe);
     zglfw_pkg.link(exe);
     zstbi_pkg.link(exe);
 

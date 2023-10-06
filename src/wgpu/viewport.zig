@@ -1,5 +1,5 @@
 const std = @import("std");
-const wgpu = @import("zgpu").wgpu;
+const webgpu = @import("webgpu.zig");
 const util = @import("../util.zig");
 const ornament = @import("../ornament.zig");
 const buffers = @import("buffers.zig");
@@ -8,16 +8,16 @@ const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 
 pub const Viewport = struct {
     const Self = @This();
-    device: wgpu.Device,
-    queue: wgpu.Queue,
-    swap_chain: wgpu.SwapChain,
+    surface: webgpu.Surface,
+    device: webgpu.Device,
+    queue: webgpu.Queue,
     pipeline: WgpuRenderPipeline,
-    shader_module: wgpu.ShaderModule,
+    shader_module: webgpu.ShaderModule,
     resolution: util.Resolution,
     dimensions_buffer: buffers.Uniform(wgsl_structs.Resolution),
 
     pub fn init(ornament_ctx: *ornament.Context) !Self {
-        var wgsl_descriptor = wgpu.ShaderModuleWgslDescriptor{
+        var wgsl_descriptor = webgpu.ShaderModuleWgslDescriptor{
             .code = @embedFile("shaders/viewport.wgsl"),
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
@@ -29,13 +29,16 @@ pub const Viewport = struct {
         var resolution = ornament_ctx.getResolution();
 
         const surface = ornament_ctx.wgpu_context.surface orelse @panic("WGPUSurface is empty.");
-        const swap_chain = ornament_ctx.wgpu_context.device.createSwapChain(surface, .{
-            .label = "[ornament] wgpu viewport swap chain",
+        const surface_capabilities = surface.getCapabilities(ornament_ctx.wgpu_context.adapter);
+        const format = webgpu.TextureFormat.bgra8_unorm;
+        surface.configure(&.{
+            .device = ornament_ctx.wgpu_context.device,
             .width = resolution.width,
             .height = resolution.height,
             .usage = .{ .render_attachment = true },
-            .format = .bgra8_unorm,
-            .present_mode = .immediate,
+            .format = format,
+            .present_mode = surface_capabilities.present_modes.?[0],
+            .alpha_mode = surface_capabilities.alpha_modes.?[0],
         });
 
         const dimensions_buffer = buffers.Uniform(wgsl_structs.Resolution).init(
@@ -45,16 +48,16 @@ pub const Viewport = struct {
         );
 
         const pipeline = ppl: {
-            var targets = [_]wgpu.ColorTargetState{.{
-                .format = .bgra8_unorm,
+            var targets = [_]webgpu.ColorTargetState{.{
+                .format = format,
                 .blend = &.{
                     .color = .{ .src_factor = .one, .dst_factor = .zero, .operation = .add },
                     .alpha = .{ .src_factor = .one, .dst_factor = .zero, .operation = .add },
                 },
-                .write_mask = wgpu.ColorWriteMask.all,
+                .write_mask = webgpu.ColorWriteMask.all,
             }};
 
-            const bind_group_layout_entries = [_]wgpu.BindGroupLayoutEntry{
+            const bind_group_layout_entries = [_]webgpu.BindGroupLayoutEntry{
                 try ornament_ctx.targetBufferLayout(0, .{ .fragment = true }, true),
                 dimensions_buffer.layout(1, .{ .fragment = true }),
             };
@@ -65,7 +68,7 @@ pub const Viewport = struct {
             });
             defer bind_group_layout.release();
 
-            const bind_group_entries = [_]wgpu.BindGroupEntry{
+            const bind_group_entries = [_]webgpu.BindGroupEntry{
                 try ornament_ctx.targetBufferBinding(0),
                 dimensions_buffer.binding(1),
             };
@@ -76,7 +79,7 @@ pub const Viewport = struct {
                 .entries = &bind_group_entries,
             });
 
-            const bind_group_layouts = [_]wgpu.BindGroupLayout{bind_group_layout};
+            const bind_group_layouts = [_]webgpu.BindGroupLayout{bind_group_layout};
             const pipeline_layout = ornament_ctx.wgpu_context.device.createPipelineLayout(.{
                 .label = "[ornament] wgpu viewport render pl",
                 .bind_group_layout_count = bind_group_layouts.len,
@@ -106,9 +109,9 @@ pub const Viewport = struct {
         };
 
         return .{
+            .surface = surface,
             .device = ornament_ctx.wgpu_context.device,
             .queue = ornament_ctx.wgpu_context.queue,
-            .swap_chain = swap_chain,
             .shader_module = shader_module,
             .pipeline = pipeline,
             .resolution = resolution,
@@ -118,49 +121,52 @@ pub const Viewport = struct {
 
     pub fn deinit(self: *Self) void {
         self.pipeline.release();
-        self.swap_chain.release();
         self.shader_module.release();
         self.dimensions_buffer.deinit();
     }
 
     pub fn render(self: *Self) !void {
-        const next_texture = self.swap_chain.getCurrentTextureView();
-        defer next_texture.release();
+        const output = self.surface.getCurrentTexture();
+        defer output.texture.release();
+        if (output.status == .success) {
+            const view = output.texture.createView(&.{});
+            defer view.release();
 
-        const commnad_encoder = self.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
-        defer commnad_encoder.release();
-        {
-            const color_attachments = [_]wgpu.RenderPassColorAttachment{.{
-                .view = next_texture,
-                .load_op = .clear,
-                .store_op = .store,
-                .clear_value = .{ .r = 0.9, .g = 0.1, .b = 0.2, .a = 1.0 },
-            }};
-            const render_pass = commnad_encoder.beginRenderPass(.{
-                .label = "[ornament] wgpu viewport render pass",
-                .color_attachment_count = color_attachments.len,
-                .color_attachments = &color_attachments,
-            });
-            defer {
-                render_pass.end();
-                render_pass.release();
+            const commnad_encoder = self.device.createCommandEncoder(.{ .label = "[ornament] wgpu viewport command encoder" });
+            defer commnad_encoder.release();
+            {
+                const color_attachments = [_]webgpu.RenderPassColorAttachment{.{
+                    .view = view,
+                    .load_op = .clear,
+                    .store_op = .store,
+                    .clear_value = .{ .r = 0.9, .g = 0.1, .b = 0.2, .a = 1.0 },
+                }};
+                const render_pass = commnad_encoder.beginRenderPass(.{
+                    .label = "[ornament] wgpu viewport render pass",
+                    .color_attachment_count = color_attachments.len,
+                    .color_attachments = &color_attachments,
+                });
+                defer {
+                    render_pass.end();
+                    render_pass.release();
+                }
+                render_pass.setPipeline(self.pipeline.render_pipeline);
+                render_pass.setBindGroup(0, self.pipeline.bind_group, null);
+                render_pass.draw(3, 1, 0, 0);
             }
-            render_pass.setPipeline(self.pipeline.render_pipeline);
-            render_pass.setBindGroup(0, self.pipeline.bind_group, null);
-            render_pass.draw(3, 1, 0, 0);
-        }
 
-        const command = commnad_encoder.finish(.{ .label = "[ornament] wgpu viewport command buffer" });
-        defer command.release();
-        self.queue.submit(&[_]wgpu.CommandBuffer{command});
-        self.swap_chain.present();
+            const command = commnad_encoder.finish(.{ .label = "[ornament] wgpu viewport command buffer" });
+            defer command.release();
+            self.queue.submit(&[_]webgpu.CommandBuffer{command});
+            self.surface.present();
+        }
     }
 };
 
 const WgpuRenderPipeline = struct {
     const Self = @This();
-    bind_group: wgpu.BindGroup,
-    render_pipeline: wgpu.RenderPipeline,
+    bind_group: webgpu.BindGroup,
+    render_pipeline: webgpu.RenderPipeline,
 
     pub fn release(self: Self) void {
         self.render_pipeline.release();
