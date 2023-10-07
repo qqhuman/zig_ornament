@@ -15,14 +15,14 @@ fn lambertian_scatter(material: Material, r_in: Ray, rec: HitRecord, attenuation
     }
 
     (*scattered) = Ray(rec.p, scatter_direction);
-    (*attenuation) = material.albedo_vec;
+    (*attenuation) = material_get_color(material.albedo_vec, rec.uv, material.albedo_texture_index);
     return true;
 }
 
 fn metal_scatter(material: Material, r_in: Ray, rec: HitRecord, attenuation: ptr<function, vec3<f32>>, scattered: ptr<function, Ray>) -> bool {
     let scattered_direction = reflect(normalize(r_in.direction), rec.normal) + material.fuzz * random_in_unit_sphere();
     (*scattered) = Ray(rec.p, scattered_direction);
-    (*attenuation) = material.albedo_vec;
+    (*attenuation) = material_get_color(material.albedo_vec, rec.uv, material.albedo_texture_index);
     return (dot(scattered_direction, rec.normal) > 0.0);
 }
 
@@ -80,10 +80,20 @@ fn material_emit(rec: HitRecord) -> vec3<f32> {
     let material = materials[rec.material_index];
     switch material.material_type {
         case 3u {
-            return material.albedo_vec;
+            return material_get_color(material.albedo_vec, rec.uv, material.albedo_texture_index);
         }
         default {
             return vec3<f32>(0.0);
         }
+    }
+}
+
+fn material_get_color(color: vec3<f32>, uv: vec2<f32>, texture_id: u32) -> vec3<f32> {
+    if texture_id < constant_state.textures_count {
+        let t = textures[texture_id];
+        let s = samplers[texture_id];
+        return textureSampleLevel(t, s, uv, 0.0).xyz;
+    } else {
+        return color;
     }
 }

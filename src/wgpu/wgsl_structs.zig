@@ -8,6 +8,7 @@ pub const Point3 = [3]f32;
 pub const Vector3 = [3]f32;
 pub const Vector4 = [TARGET_PIXEL_COMPONENTS]f32;
 pub const Normal = [4]f32; // 4th byte is padding
+pub const Uv = [2]f32;
 pub const Transform = [16]f32;
 
 pub const Node = extern struct {
@@ -36,7 +37,7 @@ pub const Material = extern struct {
 
         switch (material.albedo) {
             .vec => |v| albedo_vec = v,
-            .texture => |_| unreachable,
+            .texture => |texture| albedo_texture_index = texture.texture_id.?,
         }
 
         return .{
@@ -57,8 +58,9 @@ pub const ConstantState = extern struct {
     flip_y: u32,
     inverted_gamma: f32,
     ray_cast_epsilon: f32,
+    textures_count: u32,
 
-    pub fn from(state: *const ornament.State) Self {
+    pub fn from(state: *const ornament.State, textures_count: u32) Self {
         return .{
             .depth = state.depth,
             .width = state.resolution.width,
@@ -66,6 +68,7 @@ pub const ConstantState = extern struct {
             .flip_y = if (state.flip_y) 1 else 0,
             .inverted_gamma = state.inverted_gamma,
             .ray_cast_epsilon = state.ray_cast_epsilon,
+            .textures_count = textures_count,
         };
     }
 };

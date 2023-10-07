@@ -8,10 +8,14 @@
 
 @group(2) @binding(0) var<storage, read> materials: array<Material>;
 @group(2) @binding(1) var<storage, read> bvh_nodes: array<BvhNode>;
+@group(2) @binding(2) var textures: binding_array<texture_2d<f32>>;
+@group(2) @binding(3) var samplers: binding_array<sampler>;
 
 @group(3) @binding(0) var<storage, read> normals: array<vec3<f32>>;
 @group(3) @binding(1) var<storage, read> normal_indices: array<u32>;
-@group(3) @binding(2) var<storage, read> transforms: array<mat4x4<f32>>;
+@group(3) @binding(2) var<storage, read> uvs: array<vec2<f32>>;
+@group(3) @binding(3) var<storage, read> uv_indices: array<u32>;
+@group(3) @binding(4) var<storage, read> transforms: array<mat4x4<f32>>;
 
 @compute @workgroup_size(256, 1, 1)
 fn main_render(@builtin(global_invocation_id) inv_id: vec3<u32>) {
@@ -101,7 +105,6 @@ fn ray_color(ray: Ray) -> vec3<f32> {
         }  
 
         var attenuation = vec3<f32>(0.0);
-        rec.normal = normalize(rec.normal);
         if material_scatter(current_ray, rec, &attenuation, &scattered) {
             current_ray = scattered;
             final_color *= attenuation;

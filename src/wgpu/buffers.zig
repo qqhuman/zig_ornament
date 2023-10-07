@@ -172,36 +172,90 @@ pub fn Uniform(comptime T: type) type {
     };
 }
 
-pub const Texture = struct {
+pub const Textures = struct {
     const Self = @This();
-    txt: webgpu.Texture,
-    txtv: webgpu.TextureView,
+    textures: std.ArrayList(webgpu.Texture),
+    texture_views: std.ArrayList(webgpu.TextureView),
+    samplers: std.ArrayList(webgpu.Sampler),
+    len: u32 = 0,
 
-    pub fn init(device: webgpu.Device, texture: *ornament.Texture) Self {
-        _ = texture;
-        _ = device;
-        @panic("TODO");
-        // return .{
-        //     .txt = device.createTexture(.{
-        //         .usage = .{ .texture_binding = true, .copy_dst = true },
-        //         .size = .{
-        //             .width = texture.width,
-        //             .height = texture.height,
-        //             .depth_or_array_layers = 1,
-        //         },
-        //         .format = zgpu.imageInfoToTextureFormat(
-        //             texture.num_components,
-        //             texture.bytes_per_component,
-        //             texture.is_hdr,
-        //         ),
-        //         .mip_level_count = 1,
-        //     }),
-        //     .txtv = null,
-        // };
+    pub fn initCapacity(allocator: std.mem.Allocator, capacity: usize) !Self {
+        return .{
+            .textures = try std.ArrayList(webgpu.Texture).initCapacity(allocator, capacity),
+            .texture_views = try std.ArrayList(webgpu.TextureView).initCapacity(allocator, capacity),
+            .samplers = try std.ArrayList(webgpu.Sampler).initCapacity(allocator, capacity),
+        };
+    }
+
+    pub fn append(self: *Self, device: webgpu.Device, queue: webgpu.Queue, ornament_texture: *ornament.Texture) !void {
+        const texture = device.createTexture(.{
+            .usage = .{ .texture_binding = true, .copy_dst = true },
+            .size = .{
+                .width = ornament_texture.width,
+                .height = ornament_texture.height,
+                .depth_or_array_layers = 1,
+            },
+            .format = imageInfoToTextureFormat(
+                ornament_texture.num_components,
+                ornament_texture.bytes_per_component,
+                ornament_texture.is_hdr,
+            ),
+            .mip_level_count = 1,
+        });
+
+        queue.writeTexture(
+            .{ .texture = texture },
+            .{
+                .offset = 0,
+                .bytes_per_row = ornament_texture.bytes_per_row,
+                .rows_per_image = ornament_texture.height,
+            },
+            .{
+                .width = ornament_texture.width,
+                .height = ornament_texture.height,
+                .depth_or_array_layers = 1,
+            },
+            u8,
+            ornament_texture.data.items,
+        );
+
+        try self.textures.append(texture);
+        try self.texture_views.append(texture.createView(&.{}));
+        try self.samplers.append(device.createSampler(.{}));
+        self.len += 1;
     }
 
     pub fn deinit(self: *Self) void {
-        self.txtv.release();
-        self.txt.release();
+        for (0..self.len) |i| {
+            self.samplers.items[i].release();
+            self.texture_views.items[i].release();
+            self.textures.items[i].release();
+        }
+        self.samplers.deinit();
+        self.texture_views.deinit();
+        self.textures.deinit();
+        self.len = 0;
+    }
+
+    fn imageInfoToTextureFormat(num_components: u32, bytes_per_component: u32, is_hdr: bool) webgpu.TextureFormat {
+        std.debug.assert(num_components == 1 or num_components == 2 or num_components == 4);
+        std.debug.assert(bytes_per_component == 1 or bytes_per_component == 2);
+        std.debug.assert(if (is_hdr and bytes_per_component != 2) false else true);
+
+        if (is_hdr) {
+            if (num_components == 1) return .r16_float;
+            if (num_components == 2) return .rg16_float;
+            if (num_components == 4) return .rgba16_float;
+        } else {
+            if (bytes_per_component == 1) {
+                if (num_components == 1) return .r8_unorm;
+                if (num_components == 2) return .rg8_unorm;
+                if (num_components == 4) return .rgba8_unorm;
+            } else {
+                // TODO: Looks like wgpu does not support 16 bit unorm formats.
+                unreachable;
+            }
+        }
+        unreachable;
     }
 };

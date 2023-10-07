@@ -14,23 +14,52 @@ pub const WgpuContext = struct {
     device: webgpu.Device,
     queue: webgpu.Queue,
 
-    pub fn init(surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
+    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
         const instance = webgpu.createInstance(null);
         const surface = if (surface_descriptor) |desc| createSurface(instance, desc) else null;
 
         const adapter = try requestAdapter(instance, .{ .compatible_surface = surface, .power_preference = .high_performance });
+
         // print adapter info
-        {
-            var properties: webgpu.AdapterProperties = undefined;
-            properties.next_in_chain = null;
-            adapter.getProperties(&properties);
-            std.log.debug("[ornament] adapter name: {s}", .{properties.name});
-            std.log.debug("[ornament] adapter driver: {s}", .{properties.driver_description});
-            std.log.debug("[ornament] adapter type: {s}", .{@tagName(properties.adapter_type)});
-            std.log.debug("[ornament] adapter backend type: {s}", .{@tagName(properties.backend_type)});
+        const properties = adapter.getProperties();
+        std.log.debug("[ornament] adapter name: {s}", .{properties.name});
+        std.log.debug("[ornament] adapter driver: {s}", .{properties.driver_description});
+        std.log.debug("[ornament] adapter type: {s}", .{@tagName(properties.adapter_type)});
+        std.log.debug("[ornament] adapter backend type: {s}", .{@tagName(properties.backend_type)});
+
+        // get features
+        const features_count = adapter.enumerateFeatures(null);
+        var features = try allocator.alloc(webgpu.FeatureName, features_count);
+        defer allocator.free(features);
+        _ = adapter.enumerateFeatures(features.ptr);
+        var has_texture_binding_array_feature = false;
+        var has_sampled_texture_and_storage_buffer_array_non_uniform_indexing_feature = false;
+        for (features) |f| {
+            std.log.debug("[ornament] adapter feature: {any}", .{f});
+            switch (f) {
+                .texture_binding_array => has_texture_binding_array_feature = true,
+                .sampled_texture_and_storage_buffer_array_non_uniform_indexing => has_sampled_texture_and_storage_buffer_array_non_uniform_indexing_feature = true,
+                else => {},
+            }
         }
 
-        const device = try requestDevice(adapter, .{ .label = "[ornament] wgpu device" });
+        if (!has_texture_binding_array_feature) {
+            @panic("Adapter doesn't support texture_binding_array feature.");
+        }
+
+        if (!has_sampled_texture_and_storage_buffer_array_non_uniform_indexing_feature) {
+            @panic("Adapter doesn't support sampled_texture_and_storage_buffer_array_non_uniform_indexing feature.");
+        }
+
+        const required_features = [_]webgpu.FeatureName{
+            .texture_binding_array,
+            .sampled_texture_and_storage_buffer_array_non_uniform_indexing,
+        };
+        const device = try requestDevice(adapter, .{
+            .label = "[ornament] wgpu device",
+            .required_feature_count = required_features.len,
+            .required_features = &required_features,
+        });
         device.setUncapturedErrorCallback(onUncapturedError, null);
 
         return .{

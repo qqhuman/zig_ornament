@@ -1,5 +1,6 @@
 const std = @import("std");
 const webgpu = @import("webgpu.zig");
+const wgpu = @import("wgpu.zig");
 const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 const wgsl_structs = @import("wgsl_structs.zig");
 const buffers = @import("buffers.zig");
@@ -23,8 +24,11 @@ pub const PathTracer = struct {
     camera_buffer: buffers.Uniform(wgsl_structs.Camera),
 
     materials_buffer: buffers.Storage(wgsl_structs.Material),
+    textures: buffers.Textures,
     normals_buffer: buffers.Storage(wgsl_structs.Normal),
     normal_indices_buffer: buffers.Storage(u32),
+    uvs_buffer: buffers.Storage(wgsl_structs.Uv),
+    uv_indices_buffer: buffers.Storage(u32),
     transforms_buffer: buffers.Storage(wgsl_structs.Transform),
     nodes_buffer: buffers.Storage(wgsl_structs.Node),
 
@@ -35,16 +39,23 @@ pub const PathTracer = struct {
         const bvh = try Bvh.init(allocator, ornament_ctx);
         const resolution = ornament_ctx.state.getResolution();
 
+        var textures = try buffers.Textures.initCapacity(allocator, bvh.textures.items.len);
+        for (bvh.textures.items) |texture| {
+            try textures.append(device, queue, texture);
+        }
+
         const dynamic_state = wgsl_structs.DynamicState{};
         const dynamic_state_buffer = buffers.Uniform(wgsl_structs.DynamicState).init(device, false, dynamic_state);
-        const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(&ornament_ctx.state));
+        const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(&ornament_ctx.state, textures.len));
         const camera_buffer = buffers.Uniform(wgsl_structs.Camera).init(device, false, wgsl_structs.Camera.from(&ornament_ctx.scene.camera));
 
         const materials_buffer = buffers.Storage(wgsl_structs.Material).init(device, false, .{ .data = bvh.materials.items });
+        const nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.nodes.items });
         const normals_buffer = buffers.Storage(wgsl_structs.Normal).init(device, false, .{ .data = bvh.normals.items });
         const normal_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.normal_indices.items });
+        const uvs_buffer = buffers.Storage(wgsl_structs.Uv).init(device, false, .{ .data = bvh.uvs.items });
+        const uv_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.uv_indices.items });
         const transforms_buffer = buffers.Storage(wgsl_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
-        const nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.nodes.items });
 
         const code = @embedFile("shaders/bvh.wgsl") ++ "\n" ++
             @embedFile("shaders/pathtracer.wgsl") ++ "\n" ++
@@ -82,8 +93,11 @@ pub const PathTracer = struct {
             .camera_buffer = camera_buffer,
 
             .materials_buffer = materials_buffer,
+            .textures = textures,
             .normals_buffer = normals_buffer,
             .normal_indices_buffer = normal_indices_buffer,
+            .uvs_buffer = uvs_buffer,
+            .uv_indices_buffer = uv_indices_buffer,
             .transforms_buffer = transforms_buffer,
             .nodes_buffer = nodes_buffer,
 
@@ -99,8 +113,11 @@ pub const PathTracer = struct {
         self.constant_state_buffer.deinit();
         self.camera_buffer.deinit();
         self.materials_buffer.deinit();
+        self.textures.deinit();
         self.normals_buffer.deinit();
         self.normal_indices_buffer.deinit();
+        self.uvs_buffer.deinit();
+        self.uv_indices_buffer.deinit();
         self.transforms_buffer.deinit();
         self.nodes_buffer.deinit();
         if (self.target_buffer) |*tb| tb.deinit();
@@ -135,15 +152,16 @@ pub const PathTracer = struct {
     fn getOrCreatePipelines(self: *Self) !WgpuPipelines {
         return self.pipelines orelse {
             const target_buffer = try self.getOrCreateTargetBuffer();
+            const compute_visibility: webgpu.ShaderStage = .{ .compute = true };
             var bind_groups: [4]webgpu.BindGroup = undefined;
             var bind_group_layouts: [4]webgpu.BindGroupLayout = undefined;
             defer for (bind_group_layouts) |bgl| bgl.release();
 
             {
                 const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                    target_buffer.buffer.layout(0, .{ .compute = true }, false),
-                    target_buffer.accumulation_buffer.layout(1, .{ .compute = true }, false),
-                    target_buffer.rng_state_buffer.layout(2, .{ .compute = true }, false),
+                    target_buffer.buffer.layout(0, compute_visibility, false),
+                    target_buffer.accumulation_buffer.layout(1, compute_visibility, false),
+                    target_buffer.rng_state_buffer.layout(2, compute_visibility, false),
                 };
                 const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] target bgl",
@@ -168,9 +186,9 @@ pub const PathTracer = struct {
 
             {
                 const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                    self.dynamic_state_buffer.layout(0, .{ .compute = true }),
-                    self.constant_state_buffer.layout(1, .{ .compute = true }),
-                    self.camera_buffer.layout(2, .{ .compute = true }),
+                    self.dynamic_state_buffer.layout(0, compute_visibility),
+                    self.constant_state_buffer.layout(1, compute_visibility),
+                    self.camera_buffer.layout(2, compute_visibility),
                 };
                 const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] dynstate conststate camera bgl",
@@ -194,9 +212,25 @@ pub const PathTracer = struct {
             }
 
             {
+                const bgl_entry_extras = wgpu.BindGroupLayoutEntryExtras{
+                    .chain = .{ .next = null, .struct_type = webgpu.StructType.bind_group_layout_entry_extras },
+                    .count = self.textures.len,
+                };
                 const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                    self.materials_buffer.layout(0, .{ .compute = true }, true),
-                    self.nodes_buffer.layout(1, .{ .compute = true }, true),
+                    self.materials_buffer.layout(0, compute_visibility, true),
+                    self.nodes_buffer.layout(1, compute_visibility, true),
+                    .{
+                        .binding = 2,
+                        .visibility = compute_visibility,
+                        .texture = .{ .sample_type = .float },
+                        .next_in_chain = @ptrCast(&bgl_entry_extras),
+                    },
+                    .{
+                        .binding = 3,
+                        .visibility = compute_visibility,
+                        .sampler = .{ .binding_type = .filtering },
+                        .next_in_chain = @ptrCast(&bgl_entry_extras),
+                    },
                 };
                 const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] materials bvhnodes bgl",
@@ -204,9 +238,21 @@ pub const PathTracer = struct {
                     .entries = &layout_entries,
                 });
 
+                const bge_textures = wgpu.BindGroupEntryExtras{
+                    .chain = .{ .next = null, .struct_type = webgpu.StructType.bind_group_entry_extras },
+                    .texture_views = self.textures.texture_views.items.ptr,
+                    .texture_view_count = self.textures.len,
+                };
+                const bge_samplers = wgpu.BindGroupEntryExtras{
+                    .chain = .{ .next = null, .struct_type = webgpu.StructType.bind_group_entry_extras },
+                    .samplers = self.textures.samplers.items.ptr,
+                    .sampler_count = self.textures.len,
+                };
                 const group_entries = [_]webgpu.BindGroupEntry{
                     self.materials_buffer.binding(0),
                     self.nodes_buffer.binding(1),
+                    .{ .binding = 2, .next_in_chain = @ptrCast(&bge_textures) },
+                    .{ .binding = 3, .next_in_chain = @ptrCast(&bge_samplers) },
                 };
                 const bg = self.device.createBindGroup(.{
                     .label = "[ornament] materials bvhnodes bg",
@@ -220,9 +266,11 @@ pub const PathTracer = struct {
 
             {
                 const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                    self.normals_buffer.layout(0, .{ .compute = true }, true),
-                    self.normal_indices_buffer.layout(1, .{ .compute = true }, true),
-                    self.transforms_buffer.layout(2, .{ .compute = true }, true),
+                    self.normals_buffer.layout(0, compute_visibility, true),
+                    self.normal_indices_buffer.layout(1, compute_visibility, true),
+                    self.uvs_buffer.layout(2, compute_visibility, true),
+                    self.uv_indices_buffer.layout(3, compute_visibility, true),
+                    self.transforms_buffer.layout(4, compute_visibility, true),
                 };
                 const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] normals normal_indices transforms bgl",
@@ -233,7 +281,9 @@ pub const PathTracer = struct {
                 const group_entries = [_]webgpu.BindGroupEntry{
                     self.normals_buffer.binding(0),
                     self.normal_indices_buffer.binding(1),
-                    self.transforms_buffer.binding(2),
+                    self.uvs_buffer.binding(2),
+                    self.uv_indices_buffer.binding(3),
+                    self.transforms_buffer.binding(4),
                 };
                 const bg = self.device.createBindGroup(.{
                     .label = "[ornament] normals normal_indices transforms bg",
@@ -303,7 +353,7 @@ pub const PathTracer = struct {
         if (state.dirty) {
             dirty = true;
             state.dirty = false;
-            self.constant_state_buffer.write(self.queue, wgsl_structs.ConstantState.from(state));
+            self.constant_state_buffer.write(self.queue, wgsl_structs.ConstantState.from(state, self.textures.len));
         }
 
         if (dirty) self.reset();

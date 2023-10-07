@@ -40,7 +40,7 @@ pub const Context = struct {
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
             .textures = std.ArrayList(*Texture).init(allocator),
-            .wgpu_context = try WgpuContext.init(surface_descriptor),
+            .wgpu_context = try WgpuContext.init(allocator, surface_descriptor),
             .path_tracer = null,
         };
     }
@@ -225,6 +225,8 @@ pub const Context = struct {
         defer vertices.deinit();
         var normals = std.ArrayList(zmath.Vec).init(self.allocator);
         defer normals.deinit();
+        var uvs = std.ArrayList([2]f32).init(self.allocator);
+        defer uvs.deinit();
         var indices = std.ArrayList(u32).init(self.allocator);
         defer indices.deinit();
         const facing = 1.0;
@@ -234,6 +236,7 @@ pub const Context = struct {
         // Add the top vertex.
         try vertices.append(zmath.f32x4(0.0, 1.0, 0.0, 1.0));
         try normals.append(zmath.f32x4(0.0, facing, 0.0, 0.0));
+        try uvs.append(math.getSphereTexCoord(normals.getLast()));
 
         var v: u32 = 0;
         while (v < v_segments) : (v += 1) {
@@ -253,6 +256,7 @@ pub const Context = struct {
 
                 try vertices.append(zmath.f32x4(x, y, z, 1.0));
                 try normals.append(zmath.normalize3(zmath.f32x4(x, y, z, 0.0) * zmath.f32x4s(facing)));
+                try uvs.append(math.getSphereTexCoord(normals.getLast()));
 
                 // Top triangle fan.
                 if (v == 1) {
@@ -284,6 +288,7 @@ pub const Context = struct {
         // Bottom vertex.
         try vertices.append(zmath.f32x4(0.0, -1.0, 0.0, 1.0));
         try normals.append(zmath.f32x4(0.0, -facing, 0.0, 0.0));
+        try uvs.append(math.getSphereTexCoord(normals.getLast()));
 
         // Bottom triangle fan.
         const vertex_count: u32 = @truncate(vertices.items.len);
@@ -302,6 +307,8 @@ pub const Context = struct {
             vertices.items,
             indices.items,
             normals.items,
+            indices.items,
+            uvs.items,
             indices.items,
             transform,
             material,
@@ -340,6 +347,8 @@ pub const Context = struct {
         vertex_indices: []const u32,
         normals: []const zmath.Vec,
         normal_indices: []const u32,
+        uvs: []const [2]f32,
+        uv_indices: []const u32,
         transform: zmath.Mat,
         material: *Material,
     ) std.mem.Allocator.Error!*Mesh {
@@ -363,6 +372,8 @@ pub const Context = struct {
             .vertex_indices = try std.ArrayList(u32).initCapacity(self.allocator, vertex_indices.len),
             .normals = try std.ArrayList(zmath.Vec).initCapacity(self.allocator, normals.len),
             .normal_indices = try std.ArrayList(u32).initCapacity(self.allocator, normal_indices.len),
+            .uvs = try std.ArrayList([2]f32).initCapacity(self.allocator, uvs.len),
+            .uv_indices = try std.ArrayList(u32).initCapacity(self.allocator, uv_indices.len),
             .transform = transform,
             .material = material,
             .bvh_id = null,
@@ -374,6 +385,8 @@ pub const Context = struct {
         try mesh.vertex_indices.appendSlice(vertex_indices);
         try mesh.normals.appendSlice(normals);
         try mesh.normal_indices.appendSlice(normal_indices);
+        try mesh.uvs.appendSlice(uvs);
+        try mesh.uv_indices.appendSlice(uv_indices);
         return mesh;
     }
 

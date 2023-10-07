@@ -68,7 +68,10 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
                     (*hit).p = ray_at(ray, t);
                     (*hit).material_index = node.right_or_material_index;
                     // outward_normal = hit - center
-                    let outward_normal = (*hit).p - transform_point(transform_id + 1u, vec3<f32>(0.0));
+                    let outward_normal = normalize((*hit).p - transform_point(transform_id + 1u, vec3<f32>(0.0)));
+                    let theta = acos(-outward_normal.y);
+                    let phi = atan2(-outward_normal.z, outward_normal.x) + pi;
+                    (*hit).uv = vec2<f32>(phi / (2.0 * pi), theta / pi);
                     hit_record_set_face_normal(hit, transformed_ray, outward_normal);
                 }
             }
@@ -110,12 +113,17 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
                     let n1 = normals[normal_indices[tri + 1u]];
                     let n2 = normals[normal_indices[tri + 2u]];
 
+                    let uv0 = uvs[uv_indices[tri]];
+                    let uv1 = uvs[uv_indices[tri + 1u]];
+                    let uv2 = uvs[uv_indices[tri + 2u]];
+
                     let w = 1.0 - uv.x - uv.y;
-                    let normal = uv.x * n1 + uv.y * n2 + w * n0;
+                    let normal = w * n0 + uv.x * n1 + uv.y * n2;
 
                     (*hit).t = t;
                     (*hit).p = ray_at(not_transformed_ray, t);
-                    let outward_normal = transform_normal(inverted_transform_id, normal);
+                    (*hit).uv = w * uv0 + uv.x * uv1 + uv.y * uv2;
+                    let outward_normal = normalize(transform_normal(inverted_transform_id, normal));
                     hit_record_set_face_normal(hit, not_transformed_ray, outward_normal);
                     (*hit).material_index = material_index;
                 }

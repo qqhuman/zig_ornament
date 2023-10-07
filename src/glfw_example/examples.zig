@@ -94,7 +94,7 @@ pub fn init_spheres_and_textures(ornament_ctx: *ornament.Context, aspect_ratio: 
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
     const vup = zmath.f32x4(0.0, 1.0, 0.0, 0.0);
-    const aperture = 0.1;
+    const aperture = 0.0;
     const focus_dist = 10.0;
     ornament_ctx.scene.camera = ornament.Camera.init(
         lookfrom,
@@ -112,31 +112,88 @@ pub fn init_spheres_and_textures(ornament_ctx: *ornament.Context, aspect_ratio: 
         try ornament_ctx.lambertian(.{ .vec = zmath.f32x4(0.5, 0.5, 0.5, 1.0) }),
     ));
 
-    try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
-        zmath.f32x4(0.0, 1.0, 0.0, 1.0),
-        1.0,
-        try ornament_ctx.dielectric(1.5),
-    ));
-
     {
-        // var image = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\earthmap.jpg", 4);
-        // defer image.deinit();
-        // var texture = try ornament_ctx.createTexture(image.data, image.width, image.height, image.num_components, image.bytes_per_component, false, 1.0);
-        // _ = texture;
-
+        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\2k_mars.jpg", 4);
+        defer planet.deinit();
+        var planet_texture = try ornament_ctx.createTexture(
+            planet.data,
+            planet.width,
+            planet.height,
+            planet.num_components,
+            planet.bytes_per_component,
+            false,
+            1.0,
+        );
         try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
             zmath.f32x4(-4.0, 1.0, 0.0, 1.0),
             1.0,
-            try ornament_ctx.lambertian(.{ .vec = zmath.f32x4(0.4, 0.2, 0.1, 1.0) }),
-            //try ornament_ctx.lambertian(.{ .texture = texture }),
+            //try ornament_ctx.lambertian(.{ .vec = zmath.f32x4(0.4, 0.2, 0.1, 1.0) }),
+            try ornament_ctx.lambertian(.{ .texture = planet_texture }),
+        ));
+    }
+    {
+        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\earthmap.jpg", 4);
+        defer planet.deinit();
+        var planet_texture = try ornament_ctx.createTexture(
+            planet.data,
+            planet.width,
+            planet.height,
+            planet.num_components,
+            planet.bytes_per_component,
+            false,
+            1.0,
+        );
+
+        try ornament_ctx.scene.addMesh(try ornament_ctx.createSphereMesh(
+            zmath.f32x4(0.0, 1.0, 0.0, 1.0),
+            1.0,
+            try ornament_ctx.lambertian(.{ .texture = planet_texture }),
+        ));
+
+        // try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
+        //     zmath.f32x4(0.0, 1.0, 0.0, 1.0),
+        //     1.0,
+        //     try ornament_ctx.lambertian(.{ .texture = planet_texture }),
+        // ));
+    }
+
+    {
+        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\2k_neptune.jpg", 4);
+        defer planet.deinit();
+        var planet_texture = try ornament_ctx.createTexture(
+            planet.data,
+            planet.width,
+            planet.height,
+            planet.num_components,
+            planet.bytes_per_component,
+            false,
+            1.0,
+        );
+
+        try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
+            zmath.f32x4(4.0, 1.0, 0.0, 1.0),
+            1.0,
+            try ornament_ctx.lambertian(.{ .texture = planet_texture }),
         ));
     }
 
-    try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
-        zmath.f32x4(4.0, 1.0, 0.0, 1.0),
-        1.0,
-        try ornament_ctx.metal(.{ .vec = zmath.f32x4(0.7, 0.6, 0.5, 1.0) }, 0.0),
-    ));
+    const range = [_]f32{ -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    for (range) |a| {
+        for (range) |b| {
+            const choose_mat = rand.float(f32);
+            const center = zmath.f32x4(a + 0.9 * rand.float(f32), 0.2, b + 0.9 * rand.float(f32), 1.0);
+
+            if (zmath.length3(center - zmath.f32x4(4.0, 0.2, 0.0, 0.0))[0] > 0.9) {
+                const material = try if (choose_mat < 0.8)
+                    ornament_ctx.lambertian(.{ .vec = randomColor() * randomColor() })
+                else if (choose_mat < 0.95)
+                    ornament_ctx.metal(.{ .vec = randomColorBetween(0.5, 1.0) }, 0.5 * rand.float(f32))
+                else
+                    ornament_ctx.dielectric(1.5);
+                try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(center, 0.2, material));
+            }
+        }
+    }
 }
 
 pub fn init_spheres_and_meshes_spheres(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {

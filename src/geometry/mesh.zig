@@ -9,6 +9,8 @@ pub const Mesh = struct {
     vertex_indices: std.ArrayList(u32),
     normals: std.ArrayList(zmath.Vec),
     normal_indices: std.ArrayList(u32),
+    uvs: std.ArrayList([2]f32),
+    uv_indices: std.ArrayList(u32),
     transform: zmath.Mat,
     material: *Material,
     bvh_id: ?u32,
@@ -20,5 +22,7 @@ pub const Mesh = struct {
         self.vertex_indices.deinit();
         self.normals.deinit();
         self.normal_indices.deinit();
+        self.uvs.deinit();
+        self.uv_indices.deinit();
     }
 };

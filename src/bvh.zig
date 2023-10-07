@@ -22,6 +22,8 @@ pub const Bvh = struct {
     nodes: std.ArrayList(wgsl_structs.Node),
     normals: std.ArrayList(wgsl_structs.Normal),
     normal_indices: std.ArrayList(u32),
+    uvs: std.ArrayList(wgsl_structs.Uv),
+    uv_indices: std.ArrayList(u32),
     transforms: std.ArrayList(wgsl_structs.Transform),
     materials: std.ArrayList(wgsl_structs.Material),
     textures: std.ArrayList(*ornament.Texture),
@@ -35,17 +37,23 @@ pub const Bvh = struct {
         var blas_nodes: usize = 0;
         var normals_count: usize = 0;
         var normal_indices_count: usize = 0;
+        var uvs_count: usize = 0;
+        var uv_indices_count: usize = 0;
         for (ornament_ctx.scene.meshes.items) |m| {
             const triangles = m.vertex_indices.items.len / 3;
             blas_nodes += triangles * 2 - 1;
             normals_count += m.normals.items.len;
             normal_indices_count += m.normal_indices.items.len;
+            uvs_count += m.uvs.items.len;
+            uv_indices_count += m.uv_indices.items.len;
         }
         const expected_nodes = tlas_nodes + blas_nodes;
         var self = Self{
             .nodes = try std.ArrayList(wgsl_structs.Node).initCapacity(allocator, expected_nodes),
             .normals = try std.ArrayList(wgsl_structs.Normal).initCapacity(allocator, normals_count),
             .normal_indices = try std.ArrayList(u32).initCapacity(allocator, normal_indices_count),
+            .uvs = try std.ArrayList(wgsl_structs.Uv).initCapacity(allocator, uvs_count),
+            .uv_indices = try std.ArrayList(u32).initCapacity(allocator, uv_indices_count),
             .transforms = try std.ArrayList(wgsl_structs.Transform).initCapacity(allocator, shapes_count),
             .materials = try std.ArrayList(wgsl_structs.Material).initCapacity(allocator, ornament_ctx.materials.items.len),
             .textures = try std.ArrayList(*ornament.Texture).initCapacity(allocator, ornament_ctx.textures.items.len),
@@ -55,6 +63,7 @@ pub const Bvh = struct {
         std.log.debug("[ornament] spheres: {d}", .{ornament_ctx.scene.spheres.items.len});
         std.log.debug("[ornament] meshes: {d}", .{ornament_ctx.scene.meshes.items.len});
         std.log.debug("[ornament] mesh_instances: {d}", .{ornament_ctx.scene.mesh_instances.items.len});
+        std.log.debug("[ornament] textures: {d}", .{self.textures.items.len});
         std.log.debug("[ornament] expected bvh.nodes (tlas_nodes): {d}", .{tlas_nodes});
         std.log.debug("[ornament] expected bvh.nodes (blas_nodes): {d}", .{blas_nodes});
         std.log.debug("[ornament] expected bvh.nodes (tlas_nodes + blas_nodes): {d}", .{expected_nodes});
@@ -68,6 +77,8 @@ pub const Bvh = struct {
         self.nodes.deinit();
         self.normals.deinit();
         self.normal_indices.deinit();
+        self.uvs.deinit();
+        self.uv_indices.deinit();
         self.transforms.deinit();
         self.materials.deinit();
         self.textures.deinit();
@@ -313,6 +324,15 @@ fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_r
     while (i < mesh.normals.items.len) : (i += 1) {
         normals[i] = zmath.vecToArr4(mesh.normals.items[i]);
     }
+
+    i = 0;
+    var uv_indices = try bvh.uv_indices.addManyAsSlice(mesh.uv_indices.items.len);
+    while (i < mesh.uv_indices.items.len) : (i += 1) {
+        uv_indices[i] = mesh.uv_indices.items[i] + @as(u32, @truncate(bvh.uvs.items.len));
+    }
+
+    try bvh.uvs.appendSlice(mesh.uvs.items);
+
     return try buildBvhRecursive(allocator, bvh, leafs.items, isntances_to_resolve);
 }
 

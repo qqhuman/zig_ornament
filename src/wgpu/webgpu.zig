@@ -156,6 +156,15 @@ pub const FeatureName = enum(u32) {
     rg11_b10_ufloat_renderable = 0x0000000A,
     bgra8_unorm_storage = 0x0000000B,
     float32_filterable = 0x0000000C,
+
+    // wgpu-native specific
+    push_constants = 0x00030001,
+    texture_adapter_specific_format_features = 0x00030002,
+    multi_draw_indirect = 0x00030003,
+    multi_draw_indirect_count = 0x00030004,
+    vertex_writable_storage = 0x00030005,
+    texture_binding_array = 0x00030006,
+    sampled_texture_and_storage_buffer_array_non_uniform_indexing = 0x00030007,
 };
 
 pub const FilterMode = enum(u32) {
@@ -280,6 +289,16 @@ pub const StructType = enum(u32) {
     surface_descriptor_from_android_native_window = 0x00000009,
     surface_descriptor_from_xcb_window = 0x0000000A,
     render_pass_descriptor_max_draw_count = 0x0000000F,
+
+    // wgpu-native specific
+    device_extras = 0x00030001,
+    required_limits_extras = 0x00030002,
+    pipeline_layout_extras = 0x00030003,
+    shader_module_glsl_descriptor = 0x00030004,
+    supported_limits_extras = 0x00030005,
+    instance_extras = 0x00030006,
+    bind_group_entry_extras = 0x00030007,
+    bind_group_layout_entry_extras = 0x00030008,
 };
 
 pub const SamplerBindingType = enum(u32) {
@@ -575,7 +594,7 @@ pub const BindGroupEntry = extern struct {
     binding: u32,
     buffer: ?Buffer = null,
     offset: u64 = 0,
-    size: u64,
+    size: u64 = 0,
     sampler: ?Sampler = null,
     texture_view: ?TextureView = null,
 };
@@ -1149,8 +1168,10 @@ pub const Adapter = *opaque {
     }
     extern fn wgpuAdapterGetLimits(adapter: Adapter, limits: *SupportedLimits) Bool;
 
-    pub inline fn getProperties(adapter: Adapter, properties: *AdapterProperties) void {
-        wgpuAdapterGetProperties(adapter, properties);
+    pub inline fn getProperties(adapter: Adapter) AdapterProperties {
+        var properties: AdapterProperties = undefined;
+        wgpuAdapterGetProperties(adapter, &properties);
+        return properties;
     }
     extern fn wgpuAdapterGetProperties(adapter: Adapter, properties: *AdapterProperties) void;
 

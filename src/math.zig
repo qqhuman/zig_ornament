@@ -39,3 +39,9 @@ pub fn rotationBetweenVectors(a: zmath.Vec, b: zmath.Vec) zmath.Mat {
         k + k_cos_theta,
     )));
 }
+
+pub fn getSphereTexCoord(p: zmath.Vec) [2]f32 {
+    const theta = std.math.acos(-p[1]);
+    const phi = std.math.atan2(f32, -p[2], p[0]) + std.math.pi;
+    return .{ phi / (2.0 * std.math.pi), theta / std.math.pi };
+}

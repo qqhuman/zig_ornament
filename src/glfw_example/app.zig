@@ -12,6 +12,7 @@ const HEIGHT = 1000;
 const DEPTH = 10;
 const ITERATIONS = 1;
 const TITLE = "ornament";
+const CAMERA_SPEED = zmath.f32x4s(0.2);
 
 pub fn run() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -33,6 +34,7 @@ const App = struct {
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_example] init", .{});
         zstbi.init(allocator);
+        zstbi.setFlipVerticallyOnLoad(true);
         try zglfw.init();
 
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
@@ -52,7 +54,7 @@ const App = struct {
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
-        try @import("examples.zig").init_spheres_and_3_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_spheres_and_textures(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
         const viewport = try Viewport.init(&ornament_context);
         return .{
@@ -101,7 +103,6 @@ const App = struct {
             const a_pressed = self.window.getKey(.a) == .press;
 
             if (w_pressed or s_pressed or d_pressed or a_pressed) {
-                const speed = zmath.f32x4s(0.7);
                 const target = self.ornament.scene.camera.getLookAt();
                 var eye = self.ornament.scene.camera.getLookFrom();
                 const up = self.ornament.scene.camera.getVUp();
@@ -109,12 +110,12 @@ const App = struct {
                 const forward_norm = zmath.normalize3(forward);
                 var forward_mag = zmath.length3(forward);
 
-                if (w_pressed and forward_mag[0] > speed[0]) {
-                    eye += forward_norm * speed;
+                if (w_pressed and forward_mag[0] > CAMERA_SPEED[0]) {
+                    eye += forward_norm * CAMERA_SPEED;
                 }
 
                 if (s_pressed) {
-                    eye -= forward_norm * speed;
+                    eye -= forward_norm * CAMERA_SPEED;
                 }
 
                 const right = zmath.cross3(forward_norm, up);
@@ -126,11 +127,11 @@ const App = struct {
                     // Rescale the distance between the target and eye so
                     // that it doesn't change. The eye therefore still
                     // lies on the circle made by the target and eye.
-                    eye = target - zmath.normalize3((forward - right * speed)) * forward_mag;
+                    eye = target - zmath.normalize3((forward - right * CAMERA_SPEED)) * forward_mag;
                 }
 
                 if (a_pressed) {
-                    eye = target - zmath.normalize3((forward + right * speed)) * forward_mag;
+                    eye = target - zmath.normalize3((forward + right * CAMERA_SPEED)) * forward_mag;
                 }
                 self.ornament.scene.camera.setLookAt(eye, target, up);
             }
