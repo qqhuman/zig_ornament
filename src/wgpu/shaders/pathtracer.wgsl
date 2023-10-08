@@ -7,15 +7,15 @@
 @group(1) @binding(2) var<uniform> camera: Camera;
 
 @group(2) @binding(0) var<storage, read> materials: array<Material>;
-@group(2) @binding(1) var<storage, read> bvh_nodes: array<BvhNode>;
-@group(2) @binding(2) var textures: binding_array<texture_2d<f32>>;
-@group(2) @binding(3) var samplers: binding_array<sampler>;
+@group(2) @binding(1) var<storage, read> normals: array<vec3<f32>>;
+@group(2) @binding(2) var<storage, read> normal_indices: array<u32>;
+@group(2) @binding(3) var<storage, read> uvs: array<vec2<f32>>;
+@group(2) @binding(4) var<storage, read> uv_indices: array<u32>;
+@group(2) @binding(5) var<storage, read> transforms: array<mat4x4<f32>>;
+@group(2) @binding(6) var<storage, read> bvh_nodes: array<BvhNode>;
 
-@group(3) @binding(0) var<storage, read> normals: array<vec3<f32>>;
-@group(3) @binding(1) var<storage, read> normal_indices: array<u32>;
-@group(3) @binding(2) var<storage, read> uvs: array<vec2<f32>>;
-@group(3) @binding(3) var<storage, read> uv_indices: array<u32>;
-@group(3) @binding(4) var<storage, read> transforms: array<mat4x4<f32>>;
+@group(3) @binding(0) var textures: binding_array<texture_2d<f32>>;
+@group(3) @binding(1) var samplers: binding_array<sampler>;
 
 @compute @workgroup_size(256, 1, 1)
 fn main_render(@builtin(global_invocation_id) inv_id: vec3<u32>) {

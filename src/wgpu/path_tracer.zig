@@ -212,28 +212,61 @@ pub const PathTracer = struct {
             }
 
             {
+                const layout_entries = [_]webgpu.BindGroupLayoutEntry{
+                    self.materials_buffer.layout(0, compute_visibility, true),
+                    self.normals_buffer.layout(1, compute_visibility, true),
+                    self.normal_indices_buffer.layout(2, compute_visibility, true),
+                    self.uvs_buffer.layout(3, compute_visibility, true),
+                    self.uv_indices_buffer.layout(4, compute_visibility, true),
+                    self.transforms_buffer.layout(5, compute_visibility, true),
+                    self.nodes_buffer.layout(6, compute_visibility, true),
+                };
+                const bgl = self.device.createBindGroupLayout(.{
+                    .label = "[ornament] materials bvhnodes bgl",
+                    .entry_count = layout_entries.len,
+                    .entries = &layout_entries,
+                });
+
+                const group_entries = [_]webgpu.BindGroupEntry{
+                    self.materials_buffer.binding(0),
+                    self.normals_buffer.binding(1),
+                    self.normal_indices_buffer.binding(2),
+                    self.uvs_buffer.binding(3),
+                    self.uv_indices_buffer.binding(4),
+                    self.transforms_buffer.binding(5),
+                    self.nodes_buffer.binding(6),
+                };
+                const bg = self.device.createBindGroup(.{
+                    .label = "[ornament] materials bvhnodes bg",
+                    .layout = bgl,
+                    .entry_count = group_entries.len,
+                    .entries = &group_entries,
+                });
+                bind_group_layouts[2] = bgl;
+                bind_groups[2] = bg;
+            }
+
+            {
                 const bgl_entry_extras = wgpu.BindGroupLayoutEntryExtras{
                     .chain = .{ .next = null, .struct_type = webgpu.StructType.bind_group_layout_entry_extras },
                     .count = self.textures.len,
                 };
                 const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                    self.materials_buffer.layout(0, compute_visibility, true),
-                    self.nodes_buffer.layout(1, compute_visibility, true),
                     .{
-                        .binding = 2,
+                        .binding = 0,
                         .visibility = compute_visibility,
                         .texture = .{ .sample_type = .float },
                         .next_in_chain = @ptrCast(&bgl_entry_extras),
                     },
                     .{
-                        .binding = 3,
+                        .binding = 1,
                         .visibility = compute_visibility,
                         .sampler = .{ .binding_type = .filtering },
                         .next_in_chain = @ptrCast(&bgl_entry_extras),
                     },
                 };
                 const bgl = self.device.createBindGroupLayout(.{
-                    .label = "[ornament] materials bvhnodes bgl",
+                    .label = "[ornament] normals normal_indices transforms bgl",
                     .entry_count = layout_entries.len,
                     .entries = &layout_entries,
                 });
@@ -249,41 +282,8 @@ pub const PathTracer = struct {
                     .sampler_count = self.textures.len,
                 };
                 const group_entries = [_]webgpu.BindGroupEntry{
-                    self.materials_buffer.binding(0),
-                    self.nodes_buffer.binding(1),
-                    .{ .binding = 2, .next_in_chain = @ptrCast(&bge_textures) },
-                    .{ .binding = 3, .next_in_chain = @ptrCast(&bge_samplers) },
-                };
-                const bg = self.device.createBindGroup(.{
-                    .label = "[ornament] materials bvhnodes bg",
-                    .layout = bgl,
-                    .entry_count = group_entries.len,
-                    .entries = &group_entries,
-                });
-                bind_group_layouts[2] = bgl;
-                bind_groups[2] = bg;
-            }
-
-            {
-                const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                    self.normals_buffer.layout(0, compute_visibility, true),
-                    self.normal_indices_buffer.layout(1, compute_visibility, true),
-                    self.uvs_buffer.layout(2, compute_visibility, true),
-                    self.uv_indices_buffer.layout(3, compute_visibility, true),
-                    self.transforms_buffer.layout(4, compute_visibility, true),
-                };
-                const bgl = self.device.createBindGroupLayout(.{
-                    .label = "[ornament] normals normal_indices transforms bgl",
-                    .entry_count = layout_entries.len,
-                    .entries = &layout_entries,
-                });
-
-                const group_entries = [_]webgpu.BindGroupEntry{
-                    self.normals_buffer.binding(0),
-                    self.normal_indices_buffer.binding(1),
-                    self.uvs_buffer.binding(2),
-                    self.uv_indices_buffer.binding(3),
-                    self.transforms_buffer.binding(4),
+                    .{ .binding = 0, .next_in_chain = @ptrCast(&bge_textures) },
+                    .{ .binding = 1, .next_in_chain = @ptrCast(&bge_samplers) },
                 };
                 const bg = self.device.createBindGroup(.{
                     .label = "[ornament] normals normal_indices transforms bg",

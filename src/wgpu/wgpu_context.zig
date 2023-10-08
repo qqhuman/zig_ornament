@@ -18,7 +18,13 @@ pub const WgpuContext = struct {
         const instance = webgpu.createInstance(null);
         const surface = if (surface_descriptor) |desc| createSurface(instance, desc) else null;
 
-        const adapter = try requestAdapter(instance, .{ .compatible_surface = surface, .power_preference = .high_performance });
+        const adapter = try requestAdapter(instance, .{
+            .compatible_surface = surface,
+            .power_preference = .high_performance,
+            // Vulkan backend has artifacts with binding_array of textures
+            .backend_type = .vulkan,
+            //.backend_type = .d3d12,
+        });
 
         // print adapter info
         const properties = adapter.getProperties();
