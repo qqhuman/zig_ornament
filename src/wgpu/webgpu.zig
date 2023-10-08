@@ -1163,13 +1163,16 @@ pub const Adapter = *opaque {
     }
     extern fn wgpuAdapterEnumerateFeatures(adapter: Adapter, features: ?[*]FeatureName) usize;
 
-    pub inline fn getLimits(adapter: Adapter, limits: *SupportedLimits) Bool {
-        return wgpuAdapterGetLimits(adapter, limits);
+    pub inline fn getLimits(adapter: Adapter) ?SupportedLimits {
+        var limits: SupportedLimits = undefined;
+        limits.next_in_chain = null;
+        return if (wgpuAdapterGetLimits(adapter, &limits) == Bool.true) limits else null;
     }
     extern fn wgpuAdapterGetLimits(adapter: Adapter, limits: *SupportedLimits) Bool;
 
     pub inline fn getProperties(adapter: Adapter) AdapterProperties {
         var properties: AdapterProperties = undefined;
+        properties.next_in_chain = undefined;
         wgpuAdapterGetProperties(adapter, &properties);
         return properties;
     }
@@ -2546,6 +2549,7 @@ pub const Surface = *opaque {
 
     pub inline fn getCapabilities(surface: Surface, adapter: Adapter) SurfaceCapabilities {
         var capabilities: SurfaceCapabilities = undefined;
+        capabilities.next_in_chain = null;
         wgpuSurfaceGetCapabilities(surface, adapter, &capabilities);
         return capabilities;
     }

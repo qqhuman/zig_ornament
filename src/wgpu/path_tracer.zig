@@ -53,8 +53,8 @@ pub const PathTracer = struct {
         const uv_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.uv_indices.items });
         const transforms_buffer = buffers.Storage(wgsl_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
 
-        const code = @embedFile("shaders/bvh.wgsl") ++ "\n" ++
-            @embedFile("shaders/pathtracer.wgsl") ++ "\n" ++
+        const code = @embedFile("shaders/pathtracer.wgsl") ++ "\n" ++
+            @embedFile("shaders/bvh.wgsl") ++ "\n" ++
             @embedFile("shaders/camera.wgsl") ++ "\n" ++
             @embedFile("shaders/hitrecord.wgsl") ++ "\n" ++
             @embedFile("shaders/material.wgsl") ++ "\n" ++

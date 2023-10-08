@@ -49,6 +49,19 @@ pub const WgpuContext = struct {
             }
         }
 
+        if (adapter.getLimits()) |limits| {
+            std.log.debug("[ornament] supported limit max_bind_groups: {any}", .{limits.limits.max_bind_groups});
+            std.log.debug("[ornament] supported limit max_bindings_per_bind_group: {any}", .{limits.limits.max_bindings_per_bind_group});
+            std.log.debug("[ornament] supported limit max_dynamic_uniform_buffers_per_pipeline_layout: {any}", .{limits.limits.max_dynamic_uniform_buffers_per_pipeline_layout});
+            std.log.debug("[ornament] supported limit max_dynamic_storage_buffers_per_pipeline_layout: {any}", .{limits.limits.max_dynamic_storage_buffers_per_pipeline_layout});
+            std.log.debug("[ornament] supported limit max_uniform_buffer_binding_size: {any}", .{limits.limits.max_uniform_buffer_binding_size});
+            std.log.debug("[ornament] supported limit max_storage_buffer_binding_size: {any}", .{limits.limits.max_storage_buffer_binding_size});
+            std.log.debug("[ornament] supported limit max_storage_buffers_per_shader_stage: {any}", .{limits.limits.max_storage_buffers_per_shader_stage});
+            std.log.debug("[ornament] supported limit max_uniform_buffers_per_shader_stage: {any}", .{limits.limits.max_uniform_buffers_per_shader_stage});
+            std.log.debug("[ornament] supported limit max_sampled_textures_per_shader_stage: {any}", .{limits.limits.max_sampled_textures_per_shader_stage});
+            std.log.debug("[ornament] supported limit max_samplers_per_shader_stage: {any}", .{limits.limits.max_samplers_per_shader_stage});
+        }
+
         if (!has_texture_binding_array_feature) {
             @panic("Adapter doesn't support texture_binding_array feature.");
         }
