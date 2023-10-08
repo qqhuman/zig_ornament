@@ -89,7 +89,7 @@ pub fn init_spheres(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
     ));
 }
 
-pub fn init_spheres_and_textures(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
     const vfov = 20.0;
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
@@ -149,12 +149,6 @@ pub fn init_spheres_and_textures(ornament_ctx: *ornament.Context, aspect_ratio: 
             1.0,
             try ornament_ctx.lambertian(.{ .texture = planet_texture }),
         ));
-
-        // try ornament_ctx.scene.addSphere(try ornament_ctx.createSphere(
-        //     zmath.f32x4(0.0, 1.0, 0.0, 1.0),
-        //     1.0,
-        //     try ornament_ctx.lambertian(.{ .texture = planet_texture }),
-        // ));
     }
 
     {
@@ -194,6 +188,27 @@ pub fn init_spheres_and_textures(ornament_ctx: *ornament.Context, aspect_ratio: 
             }
         }
     }
+
+    const base_lucy_transform = zmath.mul(zmath.scalingV(zmath.f32x4s(2.0)), zmath.rotationY(std.math.pi / 2.0));
+    var mesh_lucy = try loadMesh(
+        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        ornament_ctx,
+        zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(0.0, 1.0, 2.0, 1.0))),
+        try ornament_ctx.dielectric(1.5),
+    );
+    try ornament_ctx.scene.addMesh(mesh_lucy);
+
+    try ornament_ctx.scene.addMeshInstance(try ornament_ctx.createMeshInstance(
+        mesh_lucy,
+        zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(-4.0, 1.0, 2.0, 0.0))),
+        try ornament_ctx.lambertian(.{ .vec = zmath.f32x4(0.4, 0.2, 0.1, 1.0) }),
+    ));
+
+    try ornament_ctx.scene.addMeshInstance(try ornament_ctx.createMeshInstance(
+        mesh_lucy,
+        zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(4.0, 1.0, 2.0, 0.0))),
+        try ornament_ctx.metal(.{ .vec = zmath.f32x4(0.7, 0.6, 0.5, 1.0) }, 0.0),
+    ));
 }
 
 pub fn init_spheres_and_meshes_spheres(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
@@ -486,6 +501,8 @@ pub fn loadMesh(path: [:0]const u8, ornament_ctx: *ornament.Context, transform: 
     defer vertices.deinit();
     var normals = try std.ArrayList(zmath.Vec).initCapacity(ornament_ctx.allocator, mesh.*.mNumVertices);
     defer normals.deinit();
+    var uvs = try std.ArrayList([2]f32).initCapacity(ornament_ctx.allocator, mesh.*.mNumVertices);
+    defer uvs.deinit();
     var indices = try std.ArrayList(u32).initCapacity(ornament_ctx.allocator, mesh.*.mNumFaces * 3);
     defer indices.deinit();
 
@@ -495,8 +512,14 @@ pub fn loadMesh(path: [:0]const u8, ornament_ctx: *ornament.Context, transform: 
     while (i < mesh.*.mNumVertices) : (i += 1) {
         const vertex = mesh.*.mVertices[i];
         const normal = mesh.*.mNormals[i];
+        const texture_coords = mesh.*.mTextureCoords[0];
+
         try vertices.append(zmath.f32x4(vertex.x, vertex.y, vertex.z, 1.0));
         try normals.append(zmath.normalize3(zmath.f32x4(normal.x, normal.y, normal.z, 0.0)));
+        if (texture_coords != null) {
+            const uv = texture_coords[i];
+            try uvs.append(.{ uv.x, uv.y });
+        }
         min = zmath.min(min, vertices.getLast());
         max = zmath.max(max, vertices.getLast());
     }
@@ -515,5 +538,14 @@ pub fn loadMesh(path: [:0]const u8, ornament_ctx: *ornament.Context, transform: 
         v.* = zmath.mul(v.*, normalize_matrix);
     }
 
-    return ornament_ctx.createMesh(vertices.items, indices.items, normals.items, indices.items, transform, material);
+    return ornament_ctx.createMesh(
+        vertices.items,
+        indices.items,
+        normals.items,
+        indices.items,
+        uvs.items,
+        indices.items,
+        transform,
+        material,
+    );
 }

@@ -22,8 +22,8 @@ pub const WgpuContext = struct {
             .compatible_surface = surface,
             .power_preference = .high_performance,
             // Vulkan backend has artifacts with binding_array of textures
-            .backend_type = .vulkan,
-            //.backend_type = .d3d12,
+            //.backend_type = .vulkan,
+            .backend_type = .d3d12,
         });
 
         // print adapter info

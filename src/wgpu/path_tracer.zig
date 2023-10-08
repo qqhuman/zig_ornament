@@ -39,11 +39,7 @@ pub const PathTracer = struct {
         const bvh = try Bvh.init(allocator, ornament_ctx);
         const resolution = ornament_ctx.state.getResolution();
 
-        var textures = try buffers.Textures.initCapacity(allocator, bvh.textures.items.len);
-        for (bvh.textures.items) |texture| {
-            try textures.append(device, queue, texture);
-        }
-
+        const textures = try buffers.Textures.init(allocator, bvh.textures.items, device, queue);
         const dynamic_state = wgsl_structs.DynamicState{};
         const dynamic_state_buffer = buffers.Uniform(wgsl_structs.DynamicState).init(device, false, dynamic_state);
         const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(&ornament_ctx.state, textures.len));

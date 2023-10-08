@@ -179,15 +179,21 @@ pub const Textures = struct {
     samplers: std.ArrayList(webgpu.Sampler),
     len: u32 = 0,
 
-    pub fn initCapacity(allocator: std.mem.Allocator, capacity: usize) !Self {
-        return .{
-            .textures = try std.ArrayList(webgpu.Texture).initCapacity(allocator, capacity),
-            .texture_views = try std.ArrayList(webgpu.TextureView).initCapacity(allocator, capacity),
-            .samplers = try std.ArrayList(webgpu.Sampler).initCapacity(allocator, capacity),
+    pub fn init(allocator: std.mem.Allocator, textures: []const *ornament.Texture, device: webgpu.Device, queue: webgpu.Queue) !Self {
+        var self = Self{
+            .textures = try std.ArrayList(webgpu.Texture).initCapacity(allocator, textures.len),
+            .texture_views = try std.ArrayList(webgpu.TextureView).initCapacity(allocator, textures.len),
+            .samplers = try std.ArrayList(webgpu.Sampler).initCapacity(allocator, textures.len),
         };
+
+        for (textures) |texture| {
+            try self.append(device, queue, texture);
+        }
+
+        return self;
     }
 
-    pub fn append(self: *Self, device: webgpu.Device, queue: webgpu.Queue, ornament_texture: *ornament.Texture) !void {
+    fn append(self: *Self, device: webgpu.Device, queue: webgpu.Queue, ornament_texture: *ornament.Texture) !void {
         const texture = device.createTexture(.{
             .usage = .{ .texture_binding = true, .copy_dst = true },
             .size = .{
