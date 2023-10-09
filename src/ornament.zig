@@ -330,6 +330,8 @@ pub const Context = struct {
             indices[0..],
             normals[0..],
             indices[0..],
+            &[0][2]f32{},
+            &[0]u32{},
             zmath.mul(
                 zmath.mul(
                     zmath.scaling(side1_length, 1.0, side2_length),

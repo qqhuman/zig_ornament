@@ -7,7 +7,7 @@ const util = @import("../util.zig");
 const ornament = @import("../ornament.zig");
 const Viewport = @import("../wgpu/viewport.zig").Viewport;
 
-const WIDTH = 1500;
+const WIDTH = 1000;
 const HEIGHT = 1000;
 const DEPTH = 10;
 const ITERATIONS = 1;
@@ -54,7 +54,7 @@ const App = struct {
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
         try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
-        try @import("examples.zig").init_lucy_spheres_with_textures(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        try @import("examples.zig").init_cornell_box_with_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
         const viewport = try Viewport.init(&ornament_context);
         return .{

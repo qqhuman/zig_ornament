@@ -466,7 +466,7 @@ pub fn init_cornell_box_with_lucy(ornament_ctx: *ornament.Context, aspect_ratio:
             ),
         ),
         //try ornament_ctx.lambertian(.{ .vec = zmath.f32x4(0.4, 0.2, 0.1, 0.0)}),
-        try ornament_ctx.metal(zmath.f32x4(0.7, 0.6, 0.5, 1.0), 0.0),
+        try ornament_ctx.metal(.{ .vec = zmath.f32x4(0.7, 0.6, 0.5, 1.0) }, 0.0),
     );
     try ornament_ctx.scene.addMesh(mesh);
 

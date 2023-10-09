@@ -7,7 +7,7 @@ pub const unit_z = zmath.f32x4(0.0, 0.0, 1.0, 0.0);
 
 fn approx_eql(val1: f32, val2: f32) bool {
     const eps = 0.0000001;
-    return std.math.fabs(val1 - val2) < eps;
+    return std.math.approxEqAbs(f32, val1, val2, eps);
 }
 
 pub fn rotationBetweenVectors(a: zmath.Vec, b: zmath.Vec) zmath.Mat {

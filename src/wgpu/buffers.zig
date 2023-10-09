@@ -190,10 +190,31 @@ pub const Textures = struct {
             try self.append(device, queue, texture);
         }
 
+        if (textures.len == 0) {
+            var data = [_]u8{
+                0, 0, 0, 1,
+                0, 0, 0, 1,
+                0, 0, 0, 1,
+                0, 0, 0, 1,
+            };
+            var texture = try ornament.Texture.init(
+                allocator,
+                &data,
+                2,
+                2,
+                4,
+                1,
+                false,
+                1.0,
+            );
+            defer texture.deinit();
+            try self.append(device, queue, &texture);
+        }
+
         return self;
     }
 
-    fn append(self: *Self, device: webgpu.Device, queue: webgpu.Queue, ornament_texture: *ornament.Texture) !void {
+    fn append(self: *Self, device: webgpu.Device, queue: webgpu.Queue, ornament_texture: *const ornament.Texture) !void {
         const texture = device.createTexture(.{
             .usage = .{ .texture_binding = true, .copy_dst = true },
             .size = .{
