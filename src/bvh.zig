@@ -110,8 +110,7 @@ const NodeType = enum(u32) {
     InternalNode = 0,
     Sphere = 1,
     Mesh = 2,
-    MeshInstance = 3,
-    Triangle = 4,
+    Triangle = 3,
 };
 
 const Triangle = struct {
@@ -323,7 +322,7 @@ fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf)
                     .left_aabb_min_or_v0 = zmath.vecToArr3(mi.aabb.min),
                     .left_aabb_max_or_v1 = zmath.vecToArr3(mi.aabb.max),
                     .right_or_material_index = try getMaterialIndex(bvh, mi.material),
-                    .node_type = @intFromEnum(NodeType.MeshInstance),
+                    .node_type = @intFromEnum(NodeType.Mesh),
                     .transform_id = @as(u32, @truncate(transform_id)),
                     .left_or_custom_id = mi.mesh.bvh_id orelse unreachable,
 

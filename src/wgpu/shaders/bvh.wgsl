@@ -81,7 +81,7 @@ fn bvh_hit(not_transformed_ray: Ray,
                 }
             }
             // mesh
-            case 2u, 3u: {
+            case 2u: {
                 // push signal to restore transformation after finshing mesh bvh
                 traverse_tlas = false;
                 stack_top++;
@@ -98,7 +98,7 @@ fn bvh_hit(not_transformed_ray: Ray,
                 oxinvdir = -ray.origin * invdir;
             }
             // triangle
-            case 4u: {
+            case 3u: {
                 var uv: vec2<f32>;
                 let t = triangle_hit(
                     ray, 
