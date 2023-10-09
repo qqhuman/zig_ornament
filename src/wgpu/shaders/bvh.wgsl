@@ -15,14 +15,7 @@ const finished_traverse_blas: u32 = 0xffffffffu;
 const max_bvh_depth = 64;
 var<private> node_stack: array<u32, max_bvh_depth>;
 
-fn bvh_hit(not_transformed_ray: Ray, 
-        closest_t: ptr<function, f32>,
-        closest_material_index: ptr<function, u32>,
-        closest_node_type: ptr<function, u32>,
-        closest_inverted_transform_id: ptr<function, u32>,
-        closest_tri_id: ptr<function, u32>,
-        closest_uv: ptr<function, vec2<f32>>
-    ) -> bool {
+fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
     let t_min = constant_state.ray_cast_epsilon;
     var t_max = 3.40282e+38;
     
@@ -34,6 +27,7 @@ fn bvh_hit(not_transformed_ray: Ray,
     var traverse_tlas = true;
 
     var hit_anything = false;
+    var closest_so_far = t_max;
 
     var ray = not_transformed_ray;
     var invdir = safe_invdir(ray.direction);
@@ -53,8 +47,8 @@ fn bvh_hit(not_transformed_ray: Ray,
         switch node.node_type {
             // internal node
             case 0u: {
-                let left = aabb_hit(node.left_aabb_min_or_v0, node.left_aabb_max_or_v1, invdir, oxinvdir, t_min, t_max);
-                let right = aabb_hit(node.right_aabb_min_or_v2, node.right_aabb_max_or_v3, invdir, oxinvdir, t_min, t_max);
+                let left = aabb_hit(node.left_aabb_min_or_v0, node.left_aabb_max_or_v1, invdir, oxinvdir, t_min, closest_so_far);
+                let right = aabb_hit(node.right_aabb_min_or_v2, node.right_aabb_max_or_v3, invdir, oxinvdir, t_min, closest_so_far);
                 
                 if left.x <= left.y {
                     stack_top++;
@@ -68,16 +62,23 @@ fn bvh_hit(not_transformed_ray: Ray,
             }
             // sphere
             case 1u: {
-                inverted_transform_id = node.transform_id * 2u;
-                let transformed_ray = transform_ray(inverted_transform_id, ray);
-                let t = sphere_hit(transformed_ray, t_min, t_max);
-                if t < t_max {
+                let transform_id = node.transform_id * 2u;
+                let transformed_ray = transform_ray(transform_id, ray);
+                let t = sphere_hit(transformed_ray, t_min, closest_so_far);
+                if t < closest_so_far {
+                    closest_so_far = t;
                     hit_anything = true;
-                    t_max = t;
-                    (*closest_t) = t;
-                    (*closest_material_index) = node.right_or_material_index;
-                    (*closest_node_type) = 1u;
-                    (*closest_inverted_transform_id) = inverted_transform_id;
+
+                    (*hit).t = t;
+                    (*hit).p = ray_at(ray, t);
+                    (*hit).material_index = node.right_or_material_index;
+                    // outward_normal = hit - center
+                    let center = transform_point(transform_id + 1u, vec3<f32>(0.0));
+                    let outward_normal = normalize((*hit).p - center);
+                    let theta = acos(-outward_normal.y);
+                    let phi = atan2(-outward_normal.z, outward_normal.x) + pi;
+                    (*hit).uv = vec2<f32>(phi / (2.0 * pi), theta / pi);
+                    hit_record_set_face_normal(hit, transformed_ray, outward_normal);
                 }
             }
             // mesh
@@ -106,19 +107,32 @@ fn bvh_hit(not_transformed_ray: Ray,
                     node.left_aabb_max_or_v1,
                     node.right_aabb_min_or_v2,
                     t_min, 
-                    t_max,
+                    closest_so_far,
                     &uv
                 );
 
-                if t < t_max {
+                if t < closest_so_far {
+                    closest_so_far = t;
                     hit_anything = true;
-                    t_max = t;
-                    (*closest_t) = t;
-                    (*closest_material_index) = material_index;
-                    (*closest_node_type) = 2u;
-                    (*closest_inverted_transform_id) = inverted_transform_id;
-                    (*closest_tri_id) = node.left_or_custom_id * 3u;
-                    (*closest_uv) = uv;
+
+                    let tri = node.left_or_custom_id * 3u;
+                    let n0 = normals[normal_indices[tri]];
+                    let n1 = normals[normal_indices[tri + 1u]];
+                    let n2 = normals[normal_indices[tri + 2u]];
+
+                    let uv0 = uvs[uv_indices[tri]];
+                    let uv1 = uvs[uv_indices[tri + 1u]];
+                    let uv2 = uvs[uv_indices[tri + 2u]];
+
+                    let w = 1.0 - uv.x - uv.y;
+                    let normal = w * n0 + uv.x * n1 + uv.y * n2;
+
+                    (*hit).t = t;
+                    (*hit).p = ray_at(not_transformed_ray, t);
+                    (*hit).uv = w * uv0 + uv.x * uv1 + uv.y * uv2;
+                    let outward_normal = normalize(transform_normal(inverted_transform_id, normal));
+                    hit_record_set_face_normal(hit, not_transformed_ray, outward_normal);
+                    (*hit).material_index = material_index;
                 }
             }
             default: { break; }
