@@ -90,27 +90,71 @@ fn post_processing(inv_id_x: u32, xy: vec2<u32>, accumulated_rgba: vec4<f32>) {
     }
 }
 
-fn ray_color(ray: Ray) -> vec3<f32> {
-    var current_ray = ray;
+fn ray_color(first_ray: Ray) -> vec3<f32> {
+    var ray = first_ray;
     var final_color = vec3<f32>(1.0);
     var scattered = Ray();
 
     for (var i = 0u; i < constant_state.depth; i = i + 1u) {
-        var rec = HitRecord();
-        if !bvh_hit(current_ray, &rec) {
-            var unit_direction = normalize(current_ray.direction);
-            var t = 0.5 * (unit_direction.y + 1.0);
-            final_color *= (1.0 - t) * vec3<f32>(1.0) + t * vec3<f32>(0.5, 0.7, 1.0);
+        var t: f32;
+        var material_index: u32;
+        var node_type: u32;
+        var inverted_transform_id: u32;
+        var tri_id: u32;
+        var uv: vec2<f32>;
+        if !bvh_hit(ray, &t, &material_index, &node_type, &inverted_transform_id, &tri_id, &uv) {
+            var unit_direction = normalize(ray.direction);
+            var tt = 0.5 * (unit_direction.y + 1.0);
+            final_color *= (1.0 - tt) * vec3<f32>(1.0) + tt * vec3<f32>(0.5, 0.7, 1.0);
             //final_color = vec3<f32>(0.0);
             break;
-        }  
+        } 
+
+        let transform_id = inverted_transform_id + 1u;
+        var hit: HitRecord;
+        switch node_type {
+            // sphere
+            case 1u: {
+                hit.t = t;
+                hit.p = ray_at(ray, t);
+                hit.material_index = material_index;
+                // outward_normal = hit - center
+                let center = transform_point(transform_id, vec3<f32>(0.0));
+                let outward_normal = normalize(hit.p - center);
+                let theta = acos(-outward_normal.y);
+                let phi = atan2(-outward_normal.z, outward_normal.x) + pi;
+                hit.uv = vec2<f32>(phi / (2.0 * pi), theta / pi);
+                hit_record_set_face_normal(&hit, ray, outward_normal);
+            }
+            // mesh
+            case 2u: {
+                let n0 = normals[normal_indices[tri_id]];
+                let n1 = normals[normal_indices[tri_id + 1u]];
+                let n2 = normals[normal_indices[tri_id + 2u]];
+
+                let uv0 = uvs[uv_indices[tri_id]];
+                let uv1 = uvs[uv_indices[tri_id + 1u]];
+                let uv2 = uvs[uv_indices[tri_id + 2u]];
+
+                let w = 1.0 - uv.x - uv.y;
+                let normal = w * n0 + uv.x * n1 + uv.y * n2;
+
+                hit.t = t;
+                hit.p = ray_at(ray, t);
+                hit.uv = w * uv0 + uv.x * uv1 + uv.y * uv2;
+                let outward_normal = normalize(transform_normal(inverted_transform_id, normal));
+                hit_record_set_face_normal(&hit, ray, outward_normal);
+                hit.material_index = material_index;
+            }
+            default: { break; }
+        }
 
         var attenuation = vec3<f32>(0.0);
-        if material_scatter(current_ray, rec, &attenuation, &scattered) {
-            current_ray = scattered;
+        if material_scatter(ray, hit, &attenuation, &scattered) {
+            ray = scattered;
             final_color *= attenuation;
         } else {
-            final_color *= material_emit(rec);
+            final_color *= material_emit(hit);
             break;
         }
     }
