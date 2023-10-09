@@ -11,7 +11,7 @@ struct BvhNode {
     transform_id: u32, 
 }
 
-const finished_bottom_level_of_bvh: u32 = 0xffffffffu;
+const finished_traverse_blas: u32 = 0xffffffffu;
 const max_bvh_depth = 64;
 var<private> node_stack: array<u32, max_bvh_depth>;
 
@@ -19,10 +19,11 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
     let t_min = constant_state.ray_cast_epsilon;
     var t_max = 100000.0;
     
-    let num_nodes = arrayLength(&bvh_nodes);
+    let num_nodes = arrayLength(&bvh_tlas_nodes);
     var stack_top: i32 = 0;
     var addr = num_nodes - 1u;
     node_stack[stack_top] = addr;
+    var traverse_tlas = true;
 
     var hit_anything = false;
     var closest_so_far = t_max;
@@ -36,21 +37,24 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
     var material_index: u32;
     var inverted_transform_id: u32;
     while stack_top >= 0 {
-        let node = bvh_nodes[addr];
+        var node: BvhNode;
+        if traverse_tlas {
+            node = bvh_tlas_nodes[addr];
+        } else {
+            node = bvh_blas_nodes[addr];
+        }
         switch node.node_type {
             // internal node
             case 0u: {
                 let left = aabb_hit(node.left_aabb_min_or_v0, node.left_aabb_max_or_v1, invdir, oxinvdir, t_min, closest_so_far);
                 let right = aabb_hit(node.right_aabb_min_or_v2, node.right_aabb_max_or_v3, invdir, oxinvdir, t_min, closest_so_far);
-                let traverse_left = left.x <= left.y;
-                let traverse_right = right.x <= right.y;
                 
-                if traverse_left {
+                if left.x <= left.y {
                     stack_top++;
                     node_stack[stack_top] = node.left_or_custom_id;
                 }
 
-                if traverse_right {
+                if right.x <= right.y {
                     stack_top++;
                     node_stack[stack_top] = node.right_or_material_index;
                 }
@@ -78,8 +82,9 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
             // mesh
             case 2u, 3u: {
                 // push signal to restore transformation after finshing mesh bvh
+                traverse_tlas = false;
                 stack_top++;
-                node_stack[stack_top] = finished_bottom_level_of_bvh;
+                node_stack[stack_top] = finished_traverse_blas;
 
                 // push mesh bvh
                 stack_top++;
@@ -133,7 +138,8 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
         addr = node_stack[stack_top];
         stack_top--;
 
-        if addr == finished_bottom_level_of_bvh {
+        if addr == finished_traverse_blas {
+            traverse_tlas = true;
             ray = not_transformed_ray;
             invdir = not_transformed_invdir;
             oxinvdir = not_transformed_oxinvdir;

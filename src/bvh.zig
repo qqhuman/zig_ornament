@@ -19,7 +19,8 @@ pub const Bvh = struct {
     // nodes = shapes * 2 - 1
     // BLAS nodes count of one mesh:
     // nodes = triangles * 2 - 1
-    nodes: std.ArrayList(wgsl_structs.Node),
+    tlas_nodes: std.ArrayList(wgsl_structs.Node),
+    blas_nodes: std.ArrayList(wgsl_structs.Node),
     normals: std.ArrayList(wgsl_structs.Normal),
     normal_indices: std.ArrayList(u32),
     uvs: std.ArrayList(wgsl_structs.Uv),
@@ -33,23 +34,23 @@ pub const Bvh = struct {
         if (shapes_count == 0) {
             @panic("[ornament] scene cannot be empty.");
         }
-        const tlas_nodes = shapes_count * 2 - 1;
-        var blas_nodes: usize = 0;
+        const tlas_nodes_count = shapes_count * 2 - 1;
+        var blas_nodes_count: usize = 0;
         var normals_count: usize = 0;
         var normal_indices_count: usize = 0;
         var uvs_count: usize = 0;
         var uv_indices_count: usize = 0;
         for (ornament_ctx.scene.meshes.items) |m| {
             const triangles = m.vertex_indices.items.len / 3;
-            blas_nodes += triangles * 2 - 1;
+            blas_nodes_count += triangles * 2 - 1;
             normals_count += m.normals.items.len;
             normal_indices_count += m.normal_indices.items.len;
             uvs_count += m.uvs.items.len;
             uv_indices_count += m.uv_indices.items.len;
         }
-        const expected_nodes = tlas_nodes + blas_nodes;
         var self = Self{
-            .nodes = try std.ArrayList(wgsl_structs.Node).initCapacity(allocator, expected_nodes),
+            .tlas_nodes = try std.ArrayList(wgsl_structs.Node).initCapacity(allocator, tlas_nodes_count),
+            .blas_nodes = try std.ArrayList(wgsl_structs.Node).initCapacity(allocator, blas_nodes_count),
             .normals = try std.ArrayList(wgsl_structs.Normal).initCapacity(allocator, normals_count),
             .normal_indices = try std.ArrayList(u32).initCapacity(allocator, normal_indices_count),
             .uvs = try std.ArrayList(wgsl_structs.Uv).initCapacity(allocator, uvs_count),
@@ -64,17 +65,19 @@ pub const Bvh = struct {
         std.log.debug("[ornament] meshes: {d}", .{ornament_ctx.scene.meshes.items.len});
         std.log.debug("[ornament] mesh_instances: {d}", .{ornament_ctx.scene.mesh_instances.items.len});
         std.log.debug("[ornament] textures: {d}", .{self.textures.items.len});
-        std.log.debug("[ornament] expected bvh.nodes (tlas_nodes): {d}", .{tlas_nodes});
-        std.log.debug("[ornament] expected bvh.nodes (blas_nodes): {d}", .{blas_nodes});
-        std.log.debug("[ornament] expected bvh.nodes (tlas_nodes + blas_nodes): {d}", .{expected_nodes});
-        std.log.debug("[ornament] actual bvh.nodes: {d}", .{self.nodes.items.len});
-        std.debug.assert(expected_nodes == self.nodes.items.len);
+        std.log.debug("[ornament] expected bvh.tlas_nodes: {d}", .{tlas_nodes_count});
+        std.log.debug("[ornament] actual bvh.tlas_nodes: {d}", .{self.tlas_nodes.items.len});
+        std.log.debug("[ornament] expected bvh.blas_nodes: {d}", .{blas_nodes_count});
+        std.log.debug("[ornament] actual bvh.blas_nodes: {d}", .{self.blas_nodes.items.len});
+        std.debug.assert(tlas_nodes_count == self.tlas_nodes.items.len);
+        std.debug.assert(blas_nodes_count == self.blas_nodes.items.len);
 
         return self;
     }
 
     pub fn deinit(self: *Self) void {
-        self.nodes.deinit();
+        self.tlas_nodes.deinit();
+        self.blas_nodes.deinit();
         self.normals.deinit();
         self.normal_indices.deinit();
         self.uvs.deinit();
@@ -92,19 +95,14 @@ pub const Bvh = struct {
         defer leafs.deinit();
 
         for (scene.spheres.items) |s| try leafs.append(.{ .sphere = s });
-        for (scene.meshes.items) |m| try leafs.append(.{ .mesh = m });
         for (scene.mesh_instances.items) |mi| try leafs.append(.{ .mesh_instance = mi });
-
-        var isntances_to_resolve = std.AutoHashMap(u32, *const MeshInstance).init(allocator);
-        defer isntances_to_resolve.deinit();
-
-        const root = try buildBvhRecursive(allocator, bvh, leafs.items, &isntances_to_resolve);
-        try bvh.nodes.append(root);
-
-        var iterator = isntances_to_resolve.iterator();
-        while (iterator.next()) |entry| {
-            bvh.nodes.items[entry.key_ptr.*].left_or_custom_id = entry.value_ptr.*.mesh.bvh_id orelse unreachable;
+        for (scene.meshes.items) |m| {
+            try leafs.append(.{ .mesh = m });
+            try buildMeshBvhRecursive(allocator, bvh, m);
         }
+
+        const root = try buildBvhTlasRecursive(allocator, bvh, leafs.items);
+        try bvh.tlas_nodes.append(root);
     }
 };
 
@@ -128,19 +126,16 @@ const Leaf = union(enum) {
     sphere: *Sphere,
     mesh: *Mesh,
     mesh_instance: *MeshInstance,
-    triangle: Triangle,
 };
 
 fn boxCompare(axis: usize, a: Leaf, b: Leaf) bool {
     const box_a = switch (a) {
-        .triangle => |t| t.aabb,
         .sphere => |s| s.aabb,
         .mesh => |m| m.aabb,
         .mesh_instance => |mi| mi.aabb,
     };
 
     const box_b = switch (b) {
-        .triangle => |t| t.aabb,
         .sphere => |s| s.aabb,
         .mesh => |m| m.aabb,
         .mesh_instance => |mi| mi.aabb,
@@ -149,13 +144,16 @@ fn boxCompare(axis: usize, a: Leaf, b: Leaf) bool {
     return box_a.min[axis] < box_b.min[axis];
 }
 
+fn boxCompareBlas(axis: usize, a: Triangle, b: Triangle) bool {
+    return a.aabb.min[axis] < b.aabb.min[axis];
+}
+
 fn calculateBoundingBox(leafs: []Leaf) Aabb {
     var min = zmath.f32x4(std.math.inf(f32), std.math.inf(f32), std.math.inf(f32), 1.0);
     var max = zmath.f32x4(-std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32), 1.0);
 
     for (leafs) |l| {
         const aabb = switch (l) {
-            .triangle => |t| t.aabb,
             .sphere => |s| s.aabb,
             .mesh => |m| m.aabb,
             .mesh_instance => |mi| mi.aabb,
@@ -166,132 +164,19 @@ fn calculateBoundingBox(leafs: []Leaf) Aabb {
     return Aabb.init(min, max);
 }
 
-fn buildBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf, isntances_to_resolve: *std.AutoHashMap(u32, *const MeshInstance)) std.mem.Allocator.Error!wgsl_structs.Node {
-    if (leafs.len == 0) {
-        @panic("don't support empty bvh");
-    } else if (leafs.len == 1) {
-        switch (leafs[0]) {
-            .triangle => |t| {
-                return .{
-                    .left_aabb_min_or_v0 = zmath.vecToArr3(t.v0),
-                    .left_aabb_max_or_v1 = zmath.vecToArr3(t.v1),
-                    .right_aabb_min_or_v2 = zmath.vecToArr3(t.v2),
-                    .left_or_custom_id = t.triangle_index,
-                    .node_type = @intFromEnum(NodeType.Triangle),
+fn calculateBoundingBoxBlas(leafs: []Triangle) Aabb {
+    var min = zmath.f32x4(std.math.inf(f32), std.math.inf(f32), std.math.inf(f32), 1.0);
+    var max = zmath.f32x4(-std.math.inf(f32), -std.math.inf(f32), -std.math.inf(f32), 1.0);
 
-                    .right_or_material_index = undefined,
-                    .right_aabb_max_or_v3 = undefined,
-                    .transform_id = undefined,
-                };
-            },
-            .sphere => |s| {
-                const transform = s.transform;
-                try appendTransform(bvh, zmath.inverse(transform));
-                try appendTransform(bvh, transform);
-                const transform_id = bvh.transforms.items.len / 2 - 1;
-                return .{
-                    .left_aabb_min_or_v0 = zmath.vecToArr3(s.aabb.min),
-                    .left_aabb_max_or_v1 = zmath.vecToArr3(s.aabb.max),
-                    .right_or_material_index = try getMaterialIndex(bvh, s.material),
-                    .node_type = @intFromEnum(NodeType.Sphere),
-                    .transform_id = @as(u32, @truncate(transform_id)),
-
-                    .left_or_custom_id = undefined,
-                    .right_aabb_min_or_v2 = undefined,
-                    .right_aabb_max_or_v3 = undefined,
-                };
-            },
-            .mesh => |m| {
-                const mesh_top = try fromMesh(allocator, bvh, m, isntances_to_resolve);
-
-                try bvh.nodes.append(mesh_top);
-                const mesh_top_id = @as(u32, @truncate(bvh.nodes.items.len - 1));
-                m.bvh_id = mesh_top_id;
-
-                const transform = m.transform;
-                try appendTransform(bvh, zmath.inverse(transform));
-                try appendTransform(bvh, transform);
-                const transform_id = bvh.transforms.items.len / 2 - 1;
-                return .{
-                    .left_aabb_min_or_v0 = zmath.vecToArr3(m.aabb.min),
-                    .left_aabb_max_or_v1 = zmath.vecToArr3(m.aabb.max),
-                    .left_or_custom_id = mesh_top_id,
-                    .right_or_material_index = try getMaterialIndex(bvh, m.material),
-                    .node_type = @intFromEnum(NodeType.Mesh),
-                    .transform_id = @as(u32, @truncate(transform_id)),
-
-                    .right_aabb_min_or_v2 = undefined,
-                    .right_aabb_max_or_v3 = undefined,
-                };
-            },
-            .mesh_instance => |mi| {
-                const left_or_custom_id = blk: {
-                    if (mi.mesh.bvh_id) |bvh_id| {
-                        break :blk bvh_id;
-                    } else {
-                        try isntances_to_resolve.put(@as(u32, @truncate(bvh.nodes.items.len)), mi);
-                        break :blk undefined;
-                    }
-                };
-                const transform = mi.transform;
-                try appendTransform(bvh, zmath.inverse(transform));
-                try appendTransform(bvh, transform);
-                const transform_id = bvh.transforms.items.len / 2 - 1;
-                return .{
-                    .left_aabb_min_or_v0 = zmath.vecToArr3(mi.aabb.min),
-                    .left_aabb_max_or_v1 = zmath.vecToArr3(mi.aabb.max),
-                    .right_or_material_index = try getMaterialIndex(bvh, mi.material),
-                    .node_type = @intFromEnum(NodeType.MeshInstance),
-                    .transform_id = @as(u32, @truncate(transform_id)),
-
-                    .left_or_custom_id = left_or_custom_id,
-
-                    .right_aabb_min_or_v2 = undefined,
-                    .right_aabb_max_or_v3 = undefined,
-                };
-            },
-        }
-    } else {
-        // Sort shapes based on the split axis
-        const axis = rand.intRangeAtMost(usize, 0, 2);
-        std.sort.heap(Leaf, leafs, axis, boxCompare);
-
-        // Partition shapes into left and right subsets
-        const mid = leafs.len / 2;
-        const left_leafs = leafs[0..mid];
-        const right_leafs = leafs[mid..];
-
-        // Recursively build BVH for left and right subsets
-        const left = try buildBvhRecursive(allocator, bvh, left_leafs, isntances_to_resolve);
-        try bvh.nodes.append(left);
-        const left_id = bvh.nodes.items.len - 1;
-        const left_aabb = calculateBoundingBox(left_leafs);
-
-        const right = try buildBvhRecursive(allocator, bvh, right_leafs, isntances_to_resolve);
-        try bvh.nodes.append(right);
-        const right_id = bvh.nodes.items.len - 1;
-        const right_aabb = calculateBoundingBox(right_leafs);
-
-        return .{
-            .left_aabb_min_or_v0 = zmath.vecToArr3(left_aabb.min),
-            .left_or_custom_id = @as(u32, @truncate(left_id)),
-            .left_aabb_max_or_v1 = zmath.vecToArr3(left_aabb.max),
-            .right_or_material_index = @as(u32, @truncate(right_id)),
-            .right_aabb_min_or_v2 = zmath.vecToArr3(right_aabb.min),
-            .node_type = @intFromEnum(NodeType.InternalNode),
-            .right_aabb_max_or_v3 = zmath.vecToArr3(right_aabb.max),
-
-            .transform_id = undefined,
-        };
+    for (leafs) |l| {
+        min = zmath.min(min, l.aabb.min);
+        max = zmath.max(max, l.aabb.max);
     }
+    return Aabb.init(min, max);
 }
 
-fn appendTransform(bvh: *Bvh, transform: zmath.Mat) !void {
-    try bvh.transforms.append(zmath.matToArr(transform));
-}
-
-fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_resolve: *std.AutoHashMap(u32, *const MeshInstance)) std.mem.Allocator.Error!wgsl_structs.Node {
-    var leafs = try std.ArrayList(Leaf).initCapacity(allocator, mesh.vertex_indices.items.len / 3);
+fn buildMeshBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh) std.mem.Allocator.Error!void {
+    var leafs = try std.ArrayList(Triangle).initCapacity(allocator, mesh.vertex_indices.items.len / 3);
     defer leafs.deinit();
 
     var mesh_triangle_index: usize = 0;
@@ -304,13 +189,13 @@ fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_r
             zmath.max(zmath.max(v0, v1), v2),
         );
         const global_triangle_index = @as(u32, @truncate(bvh.normal_indices.items.len / 3 + mesh_triangle_index));
-        try leafs.append(.{ .triangle = .{
+        try leafs.append(.{
             .v0 = v0,
             .v1 = v1,
             .v2 = v2,
             .triangle_index = global_triangle_index,
             .aabb = aabb,
-        } });
+        });
     }
 
     var i: usize = 0;
@@ -333,7 +218,157 @@ fn fromMesh(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh, isntances_to_r
 
     try bvh.uvs.appendSlice(mesh.uvs.items);
 
-    return try buildBvhRecursive(allocator, bvh, leafs.items, isntances_to_resolve);
+    const mesh_root = try buildBvhBlasRecursive(allocator, bvh, leafs.items);
+    try bvh.blas_nodes.append(mesh_root);
+    const mesh_top_id = @as(u32, @truncate(bvh.blas_nodes.items.len - 1));
+    mesh.bvh_id = mesh_top_id;
+}
+
+fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Triangle) std.mem.Allocator.Error!wgsl_structs.Node {
+    if (leafs.len == 0) {
+        @panic("don't support empty bvh");
+    } else if (leafs.len == 1) {
+        const t = leafs[0];
+        return .{
+            .left_aabb_min_or_v0 = zmath.vecToArr3(t.v0),
+            .left_aabb_max_or_v1 = zmath.vecToArr3(t.v1),
+            .right_aabb_min_or_v2 = zmath.vecToArr3(t.v2),
+            .left_or_custom_id = t.triangle_index,
+            .node_type = @intFromEnum(NodeType.Triangle),
+
+            .right_or_material_index = undefined,
+            .right_aabb_max_or_v3 = undefined,
+            .transform_id = undefined,
+        };
+    } else {
+        // Sort shapes based on the split axis
+        const axis = rand.intRangeAtMost(usize, 0, 2);
+        std.sort.heap(Triangle, leafs, axis, boxCompareBlas);
+
+        // Partition shapes into left and right subsets
+        const mid = leafs.len / 2;
+        const left_leafs = leafs[0..mid];
+        const right_leafs = leafs[mid..];
+
+        // Recursively build BVH for left and right subsets
+        const left = try buildBvhBlasRecursive(allocator, bvh, left_leafs);
+        try bvh.blas_nodes.append(left);
+        const left_id = bvh.blas_nodes.items.len - 1;
+        const left_aabb = calculateBoundingBoxBlas(left_leafs);
+
+        const right = try buildBvhBlasRecursive(allocator, bvh, right_leafs);
+        try bvh.blas_nodes.append(right);
+        const right_id = bvh.blas_nodes.items.len - 1;
+        const right_aabb = calculateBoundingBoxBlas(right_leafs);
+
+        return .{
+            .left_aabb_min_or_v0 = zmath.vecToArr3(left_aabb.min),
+            .left_or_custom_id = @as(u32, @truncate(left_id)),
+            .left_aabb_max_or_v1 = zmath.vecToArr3(left_aabb.max),
+            .right_or_material_index = @as(u32, @truncate(right_id)),
+            .right_aabb_min_or_v2 = zmath.vecToArr3(right_aabb.min),
+            .node_type = @intFromEnum(NodeType.InternalNode),
+            .right_aabb_max_or_v3 = zmath.vecToArr3(right_aabb.max),
+
+            .transform_id = undefined,
+        };
+    }
+}
+
+fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf) std.mem.Allocator.Error!wgsl_structs.Node {
+    if (leafs.len == 0) {
+        @panic("don't support empty bvh");
+    } else if (leafs.len == 1) {
+        switch (leafs[0]) {
+            .sphere => |s| {
+                const transform = s.transform;
+                try appendTransform(bvh, zmath.inverse(transform));
+                try appendTransform(bvh, transform);
+                const transform_id = bvh.transforms.items.len / 2 - 1;
+                return .{
+                    .left_aabb_min_or_v0 = zmath.vecToArr3(s.aabb.min),
+                    .left_aabb_max_or_v1 = zmath.vecToArr3(s.aabb.max),
+                    .right_or_material_index = try getMaterialIndex(bvh, s.material),
+                    .node_type = @intFromEnum(NodeType.Sphere),
+                    .transform_id = @as(u32, @truncate(transform_id)),
+
+                    .left_or_custom_id = undefined,
+                    .right_aabb_min_or_v2 = undefined,
+                    .right_aabb_max_or_v3 = undefined,
+                };
+            },
+            .mesh => |m| {
+                const transform = m.transform;
+                try appendTransform(bvh, zmath.inverse(transform));
+                try appendTransform(bvh, transform);
+                const transform_id = bvh.transforms.items.len / 2 - 1;
+                return .{
+                    .left_aabb_min_or_v0 = zmath.vecToArr3(m.aabb.min),
+                    .left_aabb_max_or_v1 = zmath.vecToArr3(m.aabb.max),
+                    .left_or_custom_id = m.bvh_id orelse unreachable,
+                    .right_or_material_index = try getMaterialIndex(bvh, m.material),
+                    .node_type = @intFromEnum(NodeType.Mesh),
+                    .transform_id = @as(u32, @truncate(transform_id)),
+
+                    .right_aabb_min_or_v2 = undefined,
+                    .right_aabb_max_or_v3 = undefined,
+                };
+            },
+            .mesh_instance => |mi| {
+                const transform = mi.transform;
+                try appendTransform(bvh, zmath.inverse(transform));
+                try appendTransform(bvh, transform);
+                const transform_id = bvh.transforms.items.len / 2 - 1;
+                return .{
+                    .left_aabb_min_or_v0 = zmath.vecToArr3(mi.aabb.min),
+                    .left_aabb_max_or_v1 = zmath.vecToArr3(mi.aabb.max),
+                    .right_or_material_index = try getMaterialIndex(bvh, mi.material),
+                    .node_type = @intFromEnum(NodeType.MeshInstance),
+                    .transform_id = @as(u32, @truncate(transform_id)),
+                    .left_or_custom_id = mi.mesh.bvh_id orelse unreachable,
+
+                    .right_aabb_min_or_v2 = undefined,
+                    .right_aabb_max_or_v3 = undefined,
+                };
+            },
+        }
+    } else {
+        // Sort shapes based on the split axis
+        const axis = rand.intRangeAtMost(usize, 0, 2);
+        std.sort.heap(Leaf, leafs, axis, boxCompare);
+
+        // Partition shapes into left and right subsets
+        const mid = leafs.len / 2;
+        const left_leafs = leafs[0..mid];
+        const right_leafs = leafs[mid..];
+
+        // Recursively build BVH for left and right subsets
+        const left = try buildBvhTlasRecursive(allocator, bvh, left_leafs);
+        try bvh.tlas_nodes.append(left);
+        const left_id = bvh.tlas_nodes.items.len - 1;
+        const left_aabb = calculateBoundingBox(left_leafs);
+
+        const right = try buildBvhTlasRecursive(allocator, bvh, right_leafs);
+        try bvh.tlas_nodes.append(right);
+        const right_id = bvh.tlas_nodes.items.len - 1;
+        const right_aabb = calculateBoundingBox(right_leafs);
+
+        return .{
+            .left_aabb_min_or_v0 = zmath.vecToArr3(left_aabb.min),
+            .left_or_custom_id = @as(u32, @truncate(left_id)),
+            .left_aabb_max_or_v1 = zmath.vecToArr3(left_aabb.max),
+            .right_or_material_index = @as(u32, @truncate(right_id)),
+            .right_aabb_min_or_v2 = zmath.vecToArr3(right_aabb.min),
+            .node_type = @intFromEnum(NodeType.InternalNode),
+            .right_aabb_max_or_v3 = zmath.vecToArr3(right_aabb.max),
+
+            .transform_id = undefined,
+        };
+    }
+}
+
+fn appendTransform(bvh: *Bvh, transform: zmath.Mat) !void {
+    try bvh.transforms.append(zmath.matToArr(transform));
 }
 
 fn getMaterialIndex(bvh: *Bvh, material: *Material) std.mem.Allocator.Error!u32 {

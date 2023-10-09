@@ -30,7 +30,8 @@ pub const PathTracer = struct {
     uvs_buffer: buffers.Storage(wgsl_structs.Uv),
     uv_indices_buffer: buffers.Storage(u32),
     transforms_buffer: buffers.Storage(wgsl_structs.Transform),
-    nodes_buffer: buffers.Storage(wgsl_structs.Node),
+    tlas_nodes_buffer: buffers.Storage(wgsl_structs.Node),
+    blas_nodes_buffer: buffers.Storage(wgsl_structs.Node),
 
     shader_module: webgpu.ShaderModule,
     pipelines: ?WgpuPipelines,
@@ -46,7 +47,8 @@ pub const PathTracer = struct {
         const camera_buffer = buffers.Uniform(wgsl_structs.Camera).init(device, false, wgsl_structs.Camera.from(&ornament_ctx.scene.camera));
 
         const materials_buffer = buffers.Storage(wgsl_structs.Material).init(device, false, .{ .data = bvh.materials.items });
-        const nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.nodes.items });
+        const tlas_nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.tlas_nodes.items });
+        const blas_nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.blas_nodes.items });
         const normals_buffer = buffers.Storage(wgsl_structs.Normal).init(device, false, .{ .data = bvh.normals.items });
         const normal_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.normal_indices.items });
         const uvs_buffer = buffers.Storage(wgsl_structs.Uv).init(device, false, .{ .data = bvh.uvs.items });
@@ -95,7 +97,8 @@ pub const PathTracer = struct {
             .uvs_buffer = uvs_buffer,
             .uv_indices_buffer = uv_indices_buffer,
             .transforms_buffer = transforms_buffer,
-            .nodes_buffer = nodes_buffer,
+            .tlas_nodes_buffer = tlas_nodes_buffer,
+            .blas_nodes_buffer = blas_nodes_buffer,
 
             .shader_module = shader_module,
             .pipelines = null,
@@ -115,7 +118,8 @@ pub const PathTracer = struct {
         self.uvs_buffer.deinit();
         self.uv_indices_buffer.deinit();
         self.transforms_buffer.deinit();
-        self.nodes_buffer.deinit();
+        self.tlas_nodes_buffer.deinit();
+        self.blas_nodes_buffer.deinit();
         if (self.target_buffer) |*tb| tb.deinit();
         if (self.pipelines) |*pipelines| pipelines.release();
     }
@@ -215,7 +219,8 @@ pub const PathTracer = struct {
                     self.uvs_buffer.layout(3, compute_visibility, true),
                     self.uv_indices_buffer.layout(4, compute_visibility, true),
                     self.transforms_buffer.layout(5, compute_visibility, true),
-                    self.nodes_buffer.layout(6, compute_visibility, true),
+                    self.tlas_nodes_buffer.layout(6, compute_visibility, true),
+                    self.blas_nodes_buffer.layout(7, compute_visibility, true),
                 };
                 const bgl = self.device.createBindGroupLayout(.{
                     .label = "[ornament] materials bvhnodes bgl",
@@ -230,7 +235,8 @@ pub const PathTracer = struct {
                     self.uvs_buffer.binding(3),
                     self.uv_indices_buffer.binding(4),
                     self.transforms_buffer.binding(5),
-                    self.nodes_buffer.binding(6),
+                    self.tlas_nodes_buffer.binding(6),
+                    self.blas_nodes_buffer.binding(7),
                 };
                 const bg = self.device.createBindGroup(.{
                     .label = "[ornament] materials bvhnodes bg",

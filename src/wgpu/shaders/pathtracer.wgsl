@@ -12,7 +12,8 @@
 @group(2) @binding(3) var<storage, read> uvs: array<vec2<f32>>;
 @group(2) @binding(4) var<storage, read> uv_indices: array<u32>;
 @group(2) @binding(5) var<storage, read> transforms: array<mat4x4<f32>>;
-@group(2) @binding(6) var<storage, read> bvh_nodes: array<BvhNode>;
+@group(2) @binding(6) var<storage, read> bvh_tlas_nodes: array<BvhNode>;
+@group(2) @binding(7) var<storage, read> bvh_blas_nodes: array<BvhNode>;
 
 @group(3) @binding(0) var textures: binding_array<texture_2d<f32>>;
 @group(3) @binding(1) var samplers: binding_array<sampler>;
