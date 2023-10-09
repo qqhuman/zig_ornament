@@ -17,10 +17,11 @@ var<private> node_stack: array<u32, max_bvh_depth>;
 
 fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
     let t_min = constant_state.ray_cast_epsilon;
-    var t_max = 100000.0;
+    var t_max = 3.40282e+38;
     
     let num_nodes = arrayLength(&bvh_tlas_nodes);
     var stack_top: i32 = 0;
+    // here push top of tlas tree to the stack
     var addr = num_nodes - 1u;
     node_stack[stack_top] = addr;
     var traverse_tlas = true;
@@ -72,7 +73,8 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
                     (*hit).p = ray_at(ray, t);
                     (*hit).material_index = node.right_or_material_index;
                     // outward_normal = hit - center
-                    let outward_normal = normalize((*hit).p - transform_point(transform_id + 1u, vec3<f32>(0.0)));
+                    let center = transform_point(transform_id + 1u, vec3<f32>(0.0));
+                    let outward_normal = normalize((*hit).p - center);
                     let theta = acos(-outward_normal.y);
                     let phi = atan2(-outward_normal.z, outward_normal.x) + pi;
                     (*hit).uv = vec2<f32>(phi / (2.0 * pi), theta / pi);
@@ -97,7 +99,7 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
                 oxinvdir = -ray.origin * invdir;
             }
             // triangle
-            case 4u, default: {
+            case 4u: {
                 var uv: vec2<f32>;
                 let t = triangle_hit(
                     ray, 
@@ -133,6 +135,7 @@ fn bvh_hit(not_transformed_ray: Ray, hit: ptr<function, HitRecord>) -> bool {
                     (*hit).material_index = material_index;
                 }
             }
+            default: { break; }
         }
 
         addr = node_stack[stack_top];

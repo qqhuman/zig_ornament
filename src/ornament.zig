@@ -381,12 +381,18 @@ pub const Context = struct {
             .not_transformed_aabb = not_transformed_aabb,
         }, &self.meshes);
 
+        if (uvs.len == 0) {
+            try mesh.uvs.appendNTimes(.{ 0.5, 0.5 }, vertices.len);
+            try mesh.uv_indices.appendSlice(vertex_indices);
+        } else {
+            try mesh.uvs.appendSlice(uvs);
+            try mesh.uv_indices.appendSlice(uv_indices);
+        }
+
         try mesh.vertices.appendSlice(vertices);
         try mesh.vertex_indices.appendSlice(vertex_indices);
         try mesh.normals.appendSlice(normals);
         try mesh.normal_indices.appendSlice(normal_indices);
-        try mesh.uvs.appendSlice(uvs);
-        try mesh.uv_indices.appendSlice(uv_indices);
         return mesh;
     }
 
