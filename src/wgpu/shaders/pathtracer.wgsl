@@ -18,6 +18,10 @@
 @group(3) @binding(0) var textures: binding_array<texture_2d<f32>>;
 @group(3) @binding(1) var samplers: binding_array<sampler>;
 
+const finished_traverse_blas: u32 = 0xffffffffu;
+const max_bvh_depth = 64;
+var<private> node_stack: array<u32, max_bvh_depth>;
+
 @compute @workgroup_size(256, 1, 1)
 fn main_render(@builtin(global_invocation_id) inv_id: vec3<u32>) {
     let inv_id_x = inv_id.x;
@@ -93,7 +97,6 @@ fn post_processing(inv_id_x: u32, xy: vec2<u32>, accumulated_rgba: vec4<f32>) {
 fn ray_color(first_ray: Ray) -> vec3<f32> {
     var ray = first_ray;
     var final_color = vec3<f32>(1.0);
-    var scattered = Ray();
 
     for (var i = 0u; i < constant_state.depth; i = i + 1u) {
         var t: f32;
@@ -103,21 +106,21 @@ fn ray_color(first_ray: Ray) -> vec3<f32> {
         var tri_id: u32;
         var uv: vec2<f32>;
         if !bvh_hit(ray, &t, &material_index, &node_type, &inverted_transform_id, &tri_id, &uv) {
-            var unit_direction = normalize(ray.direction);
-            var tt = 0.5 * (unit_direction.y + 1.0);
-            final_color *= (1.0 - tt) * vec3<f32>(1.0) + tt * vec3<f32>(0.5, 0.7, 1.0);
-            //final_color = vec3<f32>(0.0);
+            // var unit_direction = normalize(ray.direction);
+            // var tt = 0.5 * (unit_direction.y + 1.0);
+            // final_color *= (1.0 - tt) * vec3<f32>(1.0) + tt * vec3<f32>(0.5, 0.7, 1.0);
+            final_color = vec3<f32>(0.0);
             break;
         } 
 
         let transform_id = inverted_transform_id + 1u;
         var hit: HitRecord;
+        hit.t = t;
+        hit.p = ray_at(ray, t);
+        hit.material_index = material_index;
         switch node_type {
             // sphere
             case 1u: {
-                hit.t = t;
-                hit.p = ray_at(ray, t);
-                hit.material_index = material_index;
                 // outward_normal = hit - center
                 let center = transform_point(transform_id, vec3<f32>(0.0));
                 let outward_normal = normalize(hit.p - center);
@@ -138,18 +141,15 @@ fn ray_color(first_ray: Ray) -> vec3<f32> {
 
                 let w = 1.0 - uv.x - uv.y;
                 let normal = w * n0 + uv.x * n1 + uv.y * n2;
-
-                hit.t = t;
-                hit.p = ray_at(ray, t);
                 hit.uv = w * uv0 + uv.x * uv1 + uv.y * uv2;
                 let outward_normal = normalize(transform_normal(inverted_transform_id, normal));
                 hit_record_set_face_normal(&hit, ray, outward_normal);
-                hit.material_index = material_index;
             }
             default: { break; }
         }
 
-        var attenuation = vec3<f32>(0.0);
+        var attenuation: vec3<f32>;
+        var scattered: Ray;
         if material_scatter(ray, hit, &attenuation, &scattered) {
             ray = scattered;
             final_color *= attenuation;

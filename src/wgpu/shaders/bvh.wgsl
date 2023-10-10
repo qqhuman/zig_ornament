@@ -11,10 +11,6 @@ struct BvhNode {
     transform_id: u32, 
 }
 
-const finished_traverse_blas: u32 = 0xffffffffu;
-const max_bvh_depth = 64;
-var<private> node_stack: array<u32, max_bvh_depth>;
-
 fn bvh_hit(not_transformed_ray: Ray, 
         closest_t: ptr<function, f32>,
         closest_material_index: ptr<function, u32>,
