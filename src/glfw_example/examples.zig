@@ -113,7 +113,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
     ));
 
     {
-        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\2k_mars.jpg", 4);
+        var planet = try zstbi.Image.loadFromFile("../../src/glfw_example/assets/textures/2k_mars.jpg", 4);
         defer planet.deinit();
         var planet_texture = try ornament_ctx.createTexture(
             planet.data,
@@ -132,7 +132,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
         ));
     }
     {
-        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\earthmap.jpg", 4);
+        var planet = try zstbi.Image.loadFromFile("../../src/glfw_example/assets/textures/earthmap.jpg", 4);
         defer planet.deinit();
         var planet_texture = try ornament_ctx.createTexture(
             planet.data,
@@ -152,7 +152,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
     }
 
     {
-        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\2k_neptune.jpg", 4);
+        var planet = try zstbi.Image.loadFromFile("../../src/glfw_example/assets/textures/2k_neptune.jpg", 4);
         defer planet.deinit();
         var planet_texture = try ornament_ctx.createTexture(
             planet.data,
@@ -191,7 +191,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
 
     const base_lucy_transform = zmath.mul(zmath.scalingV(zmath.f32x4s(2.0)), zmath.rotationY(std.math.pi / 2.0));
     var mesh_lucy = try loadMesh(
-        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        "../../src/glfw_example/assets/models/lucy.obj",
         ornament_ctx,
         zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(0.0, 1.0, 2.0, 1.0))),
         try ornament_ctx.dielectric(1.5),
@@ -301,7 +301,7 @@ pub fn init_spheres_and_3_lucy(ornament_ctx: *ornament.Context, aspect_ratio: f3
 
     const base_lucy_transform = zmath.mul(zmath.scalingV(zmath.f32x4s(2.0)), zmath.rotationY(std.math.pi / 2.0));
     var mesh_lucy = try loadMesh(
-        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        "../../src/glfw_example/assets/models/lucy.obj",
         ornament_ctx,
         zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(0.0, 1.0, 0.0, 1.0))),
         try ornament_ctx.dielectric(1.5),
@@ -456,7 +456,7 @@ pub fn init_cornell_box_with_lucy(ornament_ctx: *ornament.Context, aspect_ratio:
     try init_empty_cornell_box(ornament_ctx, aspect_ratio);
     var height: f32 = 400.0;
     var mesh = try loadMesh(
-        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        "../../src/glfw_example/assets/models/lucy.obj",
         ornament_ctx,
         zmath.mul(
             zmath.scalingV(zmath.f32x4s(height)),
