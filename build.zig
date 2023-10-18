@@ -14,6 +14,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const exe_options = b.addOptions();
+    exe.addOptions("build_options", exe_options);
+    exe_options.addOption([]const u8, "models_dir", "assets/" ++ "models/");
+    exe_options.addOption([]const u8, "textures_dir", "assets/" ++ "textures/");
+
+    const install_assets_step = b.addInstallDirectory(.{
+        .source_dir = .{ .path = "src/glfw_example/assets/" },
+        .install_dir = .{ .custom = "" },
+        .install_subdir = "bin/" ++ "assets/",
+    });
+    exe.step.dependOn(&install_assets_step.step);
+
     exe.addIncludePath(std.Build.LazyPath.relative("libs/assimp/include"));
     exe.addLibraryPath(std.Build.LazyPath.relative("libs/assimp"));
     exe.linkSystemLibraryName("assimp-vc143-mt");

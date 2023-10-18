@@ -2,6 +2,7 @@ const std = @import("std");
 const zmath = @import("zmath");
 const zstbi = @import("zstbi");
 const ornament = @import("../ornament.zig");
+const build_options = @import("build_options");
 const c = @cImport({
     @cInclude("assimp/cimport.h");
     @cInclude("assimp/scene.h");
@@ -113,7 +114,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
     ));
 
     {
-        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\2k_mars.jpg", 4);
+        var planet = try loadTexture(ornament_ctx.allocator, "2k_mars.jpg", 4);
         defer planet.deinit();
         var planet_texture = try ornament_ctx.createTexture(
             planet.data,
@@ -132,7 +133,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
         ));
     }
     {
-        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\earthmap.jpg", 4);
+        var planet = try loadTexture(ornament_ctx.allocator, "earthmap.jpg", 4);
         defer planet.deinit();
         var planet_texture = try ornament_ctx.createTexture(
             planet.data,
@@ -152,7 +153,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
     }
 
     {
-        var planet = try zstbi.Image.loadFromFile("C:\\my_space\\code\\zig\\zig_ornament\\src\\glfw_example\\assets\\textures\\2k_neptune.jpg", 4);
+        var planet = try loadTexture(ornament_ctx.allocator, "2k_neptune.jpg", 4);
         defer planet.deinit();
         var planet_texture = try ornament_ctx.createTexture(
             planet.data,
@@ -191,7 +192,8 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
 
     const base_lucy_transform = zmath.mul(zmath.scalingV(zmath.f32x4s(2.0)), zmath.rotationY(std.math.pi / 2.0));
     var mesh_lucy = try loadMesh(
-        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        ornament_ctx.allocator,
+        "lucy.obj",
         ornament_ctx,
         zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(0.0, 1.0, 2.0, 1.0))),
         try ornament_ctx.dielectric(1.5),
@@ -301,7 +303,8 @@ pub fn init_spheres_and_3_lucy(ornament_ctx: *ornament.Context, aspect_ratio: f3
 
     const base_lucy_transform = zmath.mul(zmath.scalingV(zmath.f32x4s(2.0)), zmath.rotationY(std.math.pi / 2.0));
     var mesh_lucy = try loadMesh(
-        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        ornament_ctx.allocator,
+        "lucy.obj",
         ornament_ctx,
         zmath.mul(base_lucy_transform, zmath.translationV(zmath.f32x4(0.0, 1.0, 0.0, 1.0))),
         try ornament_ctx.dielectric(1.5),
@@ -456,7 +459,8 @@ pub fn init_cornell_box_with_lucy(ornament_ctx: *ornament.Context, aspect_ratio:
     try init_empty_cornell_box(ornament_ctx, aspect_ratio);
     var height: f32 = 400.0;
     var mesh = try loadMesh(
-        "C:\\my_space\\code\\rust\\rs_ornament\\examples\\models\\lucy.obj",
+        ornament_ctx.allocator,
+        "lucy.obj",
         ornament_ctx,
         zmath.mul(
             zmath.scalingV(zmath.f32x4s(height)),
@@ -485,9 +489,31 @@ pub fn init_cornell_box_with_lucy(ornament_ctx: *ornament.Context, aspect_ratio:
     ));
 }
 
-pub fn loadMesh(path: [:0]const u8, ornament_ctx: *ornament.Context, transform: zmath.Mat, material: *ornament.Material) !*ornament.Mesh {
+fn loadTexture(allocator: std.mem.Allocator, texturename: []const u8, forced_num_components: u32) !zstbi.Image {
+    const exe_dir_path = std.fs.selfExeDirPathAlloc(allocator) catch unreachable;
+    defer allocator.free(exe_dir_path);
+    const texturepath = std.fs.path.joinZ(allocator, &.{
+        exe_dir_path,
+        build_options.textures_dir,
+        texturename,
+    }) catch unreachable;
+    defer allocator.free(texturepath);
+
+    return zstbi.Image.loadFromFile(texturepath, forced_num_components);
+}
+
+fn loadMesh(allocator: std.mem.Allocator, modelname: [:0]const u8, ornament_ctx: *ornament.Context, transform: zmath.Mat, material: *ornament.Material) !*ornament.Mesh {
+    const exe_dir_path = std.fs.selfExeDirPathAlloc(allocator) catch unreachable;
+    defer allocator.free(exe_dir_path);
+    const modelpath = std.fs.path.joinZ(allocator, &.{
+        exe_dir_path,
+        build_options.models_dir,
+        modelname,
+    }) catch unreachable;
+    defer allocator.free(modelpath);
+
     const scene = c.aiImportFile(
-        path,
+        modelpath,
         c.aiProcess_Triangulate | c.aiProcess_JoinIdenticalVertices | c.aiProcess_SortByPType | c.aiProcess_GenSmoothNormals,
     );
     defer c.aiReleaseImport(scene);
