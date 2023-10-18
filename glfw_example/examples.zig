@@ -1,7 +1,7 @@
 const std = @import("std");
 const zmath = @import("zmath");
 const zstbi = @import("zstbi");
-const ornament = @import("../ornament.zig");
+const ornament = @import("ornament");
 const build_options = @import("build_options");
 const c = @cImport({
     @cInclude("assimp/cimport.h");

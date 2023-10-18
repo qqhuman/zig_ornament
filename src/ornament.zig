@@ -1,5 +1,4 @@
 const std = @import("std");
-const webgpu = @import("wgpu/webgpu.zig");
 const zmath = @import("zmath");
 const util = @import("util.zig");
 const math = @import("math.zig");
@@ -16,6 +15,10 @@ pub const Aabb = geometry.Aabb;
 pub const Sphere = geometry.Sphere;
 pub const Mesh = geometry.Mesh;
 pub const MeshInstance = geometry.MeshInstance;
+pub const wgpu = @import("wgpu/wgpu.zig");
+pub const webgpu = @import("wgpu/webgpu.zig");
+pub const Viewport = @import("wgpu/viewport.zig").Viewport;
+pub const Resolution = util.Resolution;
 
 pub const Context = struct {
     const Self = @This();
@@ -90,14 +93,14 @@ pub const Context = struct {
         return self.state.getIterations();
     }
 
-    pub fn setResolution(self: *Self, resolution: util.Resolution) !void {
+    pub fn setResolution(self: *Self, resolution: Resolution) !void {
         self.state.setResolution(resolution);
         if (self.path_tracer) |*pt| {
             pt.setResolution(resolution);
         }
     }
 
-    pub fn getResolution(self: Self) util.Resolution {
+    pub fn getResolution(self: Self) Resolution {
         return self.state.getResolution();
     }
 
@@ -456,7 +459,7 @@ pub const Context = struct {
 
 pub const State = struct {
     const Self = @This();
-    resolution: util.Resolution,
+    resolution: Resolution,
     depth: u32,
     flip_y: bool,
     inverted_gamma: f32,
@@ -516,12 +519,12 @@ pub const State = struct {
         return self.iterations;
     }
 
-    pub fn setResolution(self: *Self, resolution: util.Resolution) void {
+    pub fn setResolution(self: *Self, resolution: Resolution) void {
         self.resolution = resolution;
         self.makeDirty();
     }
 
-    pub fn getResolution(self: Self) util.Resolution {
+    pub fn getResolution(self: Self) Resolution {
         return self.resolution;
     }
 

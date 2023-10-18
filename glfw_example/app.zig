@@ -2,10 +2,9 @@ const std = @import("std");
 const zmath = @import("zmath");
 const zglfw = @import("zglfw");
 const zstbi = @import("zstbi");
-const webgpu = @import("../wgpu/webgpu.zig");
-const util = @import("../util.zig");
-const ornament = @import("../ornament.zig");
-const Viewport = @import("../wgpu/viewport.zig").Viewport;
+const ornament = @import("ornament");
+const webgpu = ornament.webgpu;
+const Viewport = ornament.Viewport;
 
 const WIDTH = 1000;
 const HEIGHT = 1000;
@@ -53,10 +52,10 @@ const App = struct {
         ornament_context.setFlipY(true);
         ornament_context.setDepth(DEPTH);
         ornament_context.setIterations(ITERATIONS);
-        try ornament_context.setResolution(util.Resolution{ .width = WIDTH, .height = HEIGHT });
+        try ornament_context.setResolution(ornament.Resolution{ .width = WIDTH, .height = HEIGHT });
         try @import("examples.zig").init_cornell_box_with_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
 
-        const viewport = try Viewport.init(&ornament_context);
+        const viewport = try ornament.Viewport.init(&ornament_context);
         return .{
             .allocator = allocator,
             .window = window,
@@ -82,7 +81,7 @@ const App = struct {
 
     fn onFramebufferSize(window: *zglfw.Window, width: i32, height: i32) callconv(.C) void {
         var self: *Self = window.getUserPointer(Self) orelse unreachable;
-        const new_resolution = util.Resolution{ .width = @intCast(width), .height = @intCast(height) };
+        const new_resolution = ornament.Resolution{ .width = @intCast(width), .height = @intCast(height) };
         if (!std.meta.eql(self.ornament.getResolution(), new_resolution)) {
             std.log.debug("[glfw_example] onFramebufferSize width = {d}, height = {d}", .{ width, height });
             self.ornament.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
@@ -140,7 +139,7 @@ const App = struct {
 
     pub fn renderLoop(self: *Self) !void {
         std.log.debug("[glfw_example] renderLoop", .{});
-        var fps_counter = util.FpsCounter.init();
+        var fps_counter = FpsCounter.init();
         while (!self.window.shouldClose() and self.window.getKey(.escape) != .press) {
             zglfw.pollEvents();
             self.update();
@@ -151,6 +150,29 @@ const App = struct {
             }
             try self.viewport.?.render();
             fps_counter.endFrames(ITERATIONS);
+        }
+    }
+};
+
+pub const FpsCounter = struct {
+    pub const Self = @This();
+    timer: std.time.Timer,
+    frames: u32,
+
+    pub fn init() Self {
+        return .{
+            .frames = 0,
+            .timer = std.time.Timer.start() catch unreachable,
+        };
+    }
+
+    pub fn endFrames(self: *Self, frames: u32) void {
+        self.frames += frames;
+        const delta_time = @as(f64, @floatFromInt(self.timer.read())) / std.time.ns_per_s;
+        if (delta_time > 1.0) {
+            std.log.debug("FPS: {d}", .{@as(f64, @floatFromInt(self.frames)) / delta_time});
+            self.frames = 0;
+            self.timer.reset();
         }
     }
 };

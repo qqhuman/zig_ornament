@@ -8,8 +8,8 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "zig_ornament",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .name = "glfw_example",
+        .root_source_file = .{ .path = "glfw_example/main.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
     exe_options.addOption([]const u8, "textures_dir", "assets/" ++ "textures/");
 
     const install_assets_step = b.addInstallDirectory(.{
-        .source_dir = .{ .path = "src/glfw_example/assets/" },
+        .source_dir = .{ .path = "glfw_example/assets/" },
         .install_dir = .{ .custom = "" },
         .install_subdir = "bin/" ++ "assets/",
     });
@@ -31,17 +31,15 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibraryName("assimp-vc143-mt");
     b.installBinFile("libs/assimp/assimp-vc143-mt.dll", "assimp-vc143-mt.dll");
 
-    exe.addLibraryPath(std.Build.LazyPath.relative("libs/wgpu-native"));
-    exe.linkSystemLibraryName("wgpu_native.dll");
-    b.installBinFile("libs/wgpu-native/wgpu_native.dll", "wgpu_native.dll");
-
-    const zmath_pkg = zmath.package(b, target, optimize, .{ .options = .{ .enable_cross_platform_determinism = true } });
+    var zmath_pkg = zmath.package(b, target, optimize, .{ .options = .{ .enable_cross_platform_determinism = true } });
     const zglfw_pkg = zglfw.package(b, target, optimize, .{});
     const zstbi_pkg = zstbi.package(b, target, optimize, .{});
+    const ornament = package(b, .{ .deps = .{ .zmath_pkg = &zmath_pkg } });
 
     zmath_pkg.link(exe);
     zglfw_pkg.link(exe);
     zstbi_pkg.link(exe);
+    ornament.link(exe);
 
     b.installArtifact(exe);
 
@@ -53,4 +51,45 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+}
+
+pub const Package = struct {
+    ornament: *std.Build.Module,
+    install: *std.Build.Step,
+
+    pub fn link(self: Package, exe: *std.Build.CompileStep) void {
+        exe.addLibraryPath(std.Build.LazyPath.relative("libs/wgpu-native"));
+        exe.linkSystemLibraryName("wgpu_native.dll");
+
+        exe.step.dependOn(self.install);
+        exe.addModule("ornament", self.ornament);
+    }
+};
+
+pub fn package(
+    b: *std.Build,
+    args: struct {
+        deps: struct {
+            zmath_pkg: *zmath.Package,
+        },
+    },
+) Package {
+    const install_step = b.allocator.create(std.Build.Step) catch @panic("OOM");
+    install_step.* = std.Build.Step.init(.{ .id = .custom, .name = "ornament-install", .owner = b });
+
+    install_step.dependOn(
+        &b.addInstallFile(
+            .{ .path = "libs/wgpu-native/wgpu_native.dll" },
+            "bin/wgpu_native.dll",
+        ).step,
+    );
+    return .{
+        .ornament = b.createModule(.{
+            .source_file = .{ .path = "src/ornament.zig" },
+            .dependencies = &.{
+                .{ .name = "zmath", .module = args.deps.zmath_pkg.zmath },
+            },
+        }),
+        .install = install_step,
+    };
 }
