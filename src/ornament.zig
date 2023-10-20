@@ -15,6 +15,7 @@ pub const Aabb = geometry.Aabb;
 pub const Sphere = geometry.Sphere;
 pub const Mesh = geometry.Mesh;
 pub const MeshInstance = geometry.MeshInstance;
+pub const hip = @import("hip/hip.zig");
 pub const wgpu = @import("wgpu/wgpu.zig");
 pub const webgpu = @import("wgpu/webgpu.zig");
 pub const Viewport = @import("wgpu/viewport.zig").Viewport;

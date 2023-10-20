@@ -55,13 +55,25 @@ pub fn build(b: *std.Build) void {
 
 pub const Package = struct {
     ornament: *std.Build.Module,
-    install: *std.Build.Step,
+    dep_steps: *std.Build.Step,
 
     pub fn link(self: Package, exe: *std.Build.CompileStep) void {
+        exe.linkLibC();
+        exe.linkLibCpp();
+
         exe.addLibraryPath(std.Build.LazyPath.relative("libs/wgpu-native"));
         exe.linkSystemLibraryName("wgpu_native.dll");
 
-        exe.step.dependOn(self.install);
+        const hip_sdk_dir = "C:/Program Files/AMD/ROCm/5.5/";
+        exe.addIncludePath(std.build.LazyPath{ .path = hip_sdk_dir ++ "include" });
+        exe.addLibraryPath(std.build.LazyPath{ .path = hip_sdk_dir ++ "lib" });
+        exe.linkSystemLibrary("amdhip64");
+
+        exe.defineCMacro("__HIP_PLATFORM_AMD__", null);
+        exe.addIncludePath(std.Build.LazyPath.relative("src/hip"));
+        exe.addCSourceFile(.{ .file = .{ .path = "src/hip/hip.cpp" }, .flags = &.{""} });
+
+        exe.step.dependOn(self.dep_steps);
         exe.addModule("ornament", self.ornament);
     }
 };
@@ -74,15 +86,20 @@ pub fn package(
         },
     },
 ) Package {
-    const install_step = b.allocator.create(std.Build.Step) catch @panic("OOM");
-    install_step.* = std.Build.Step.init(.{ .id = .custom, .name = "ornament-install", .owner = b });
+    const install_wgpu = b.addInstallBinFile(std.build.LazyPath.relative("libs/wgpu-native/wgpu_native.dll"), "wgpu_native.dll");
+    const build_hip_kernals = b.addSystemCommand(&.{
+        "hipcc",
+        "--genco",
+        "--offload-arch=gfx1030",
+        "-o",
+        b.pathJoin(&.{ b.exe_dir, "pathtracer.co" }),
+        "src/hip/kernels/pathtracer.cpp",
+    });
 
-    install_step.dependOn(
-        &b.addInstallFile(
-            .{ .path = "libs/wgpu-native/wgpu_native.dll" },
-            "bin/wgpu_native.dll",
-        ).step,
-    );
+    const dep_steps = b.allocator.create(std.Build.Step) catch @panic("OOM");
+    dep_steps.* = std.Build.Step.init(.{ .id = .custom, .name = "ornament. install wgpu. build hip kernels", .owner = b });
+    dep_steps.dependOn(&install_wgpu.step);
+    dep_steps.dependOn(&build_hip_kernals.step);
     return .{
         .ornament = b.createModule(.{
             .source_file = .{ .path = "src/ornament.zig" },
@@ -90,6 +107,6 @@ pub fn package(
                 .{ .name = "zmath", .module = args.deps.zmath_pkg.zmath },
             },
         }),
-        .install = install_step,
+        .dep_steps = dep_steps,
     };
 }
