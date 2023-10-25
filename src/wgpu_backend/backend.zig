@@ -1,14 +1,15 @@
+pub const wgpu = @import("wgpu.zig");
+pub const webgpu = @import("webgpu.zig");
+pub const buffers = @import("buffers.zig");
+pub const WgpuContext = @import("wgpu_context.zig").WgpuContext;
+
 const std = @import("std");
-const webgpu = @import("webgpu.zig");
-const wgpu = @import("wgpu.zig");
-const WgpuContext = @import("wgpu_context.zig").WgpuContext;
-const wgsl_structs = @import("wgsl_structs.zig");
-const buffers = @import("buffers.zig");
+const gpu_structs = @import("../gpu_structs.zig");
 const ornament = @import("../ornament.zig");
 const util = @import("../util.zig");
 const Bvh = @import("../bvh.zig").Bvh;
 
-pub const PathTracer = struct {
+pub const Backend = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     device: webgpu.Device,
@@ -16,22 +17,22 @@ pub const PathTracer = struct {
 
     resolution: util.Resolution,
     bvh: Bvh,
-    dynamic_state: wgsl_structs.DynamicState,
+    dynamic_state: gpu_structs.DynamicState,
 
     target_buffer: ?buffers.Target,
-    dynamic_state_buffer: buffers.Uniform(wgsl_structs.DynamicState),
-    constant_state_buffer: buffers.Uniform(wgsl_structs.ConstantState),
-    camera_buffer: buffers.Uniform(wgsl_structs.Camera),
+    dynamic_state_buffer: buffers.Uniform(gpu_structs.DynamicState),
+    constant_state_buffer: buffers.Uniform(gpu_structs.ConstantState),
+    camera_buffer: buffers.Uniform(gpu_structs.Camera),
 
-    materials_buffer: buffers.Storage(wgsl_structs.Material),
+    materials_buffer: buffers.Storage(gpu_structs.Material),
     textures: buffers.Textures,
-    normals_buffer: buffers.Storage(wgsl_structs.Normal),
+    normals_buffer: buffers.Storage(gpu_structs.Normal),
     normal_indices_buffer: buffers.Storage(u32),
-    uvs_buffer: buffers.Storage(wgsl_structs.Uv),
+    uvs_buffer: buffers.Storage(gpu_structs.Uv),
     uv_indices_buffer: buffers.Storage(u32),
-    transforms_buffer: buffers.Storage(wgsl_structs.Transform),
-    tlas_nodes_buffer: buffers.Storage(wgsl_structs.Node),
-    blas_nodes_buffer: buffers.Storage(wgsl_structs.Node),
+    transforms_buffer: buffers.Storage(gpu_structs.Transform),
+    tlas_nodes_buffer: buffers.Storage(gpu_structs.Node),
+    blas_nodes_buffer: buffers.Storage(gpu_structs.Node),
 
     shader_module: webgpu.ShaderModule,
     pipelines: ?WgpuPipelines,
@@ -41,19 +42,19 @@ pub const PathTracer = struct {
         const resolution = ornament_ctx.state.getResolution();
 
         const textures = try buffers.Textures.init(allocator, bvh.textures.items, device, queue);
-        const dynamic_state = wgsl_structs.DynamicState{};
-        const dynamic_state_buffer = buffers.Uniform(wgsl_structs.DynamicState).init(device, false, dynamic_state);
-        const constant_state_buffer = buffers.Uniform(wgsl_structs.ConstantState).init(device, false, wgsl_structs.ConstantState.from(&ornament_ctx.state, textures.len));
-        const camera_buffer = buffers.Uniform(wgsl_structs.Camera).init(device, false, wgsl_structs.Camera.from(&ornament_ctx.scene.camera));
+        const dynamic_state = gpu_structs.DynamicState{};
+        const dynamic_state_buffer = buffers.Uniform(gpu_structs.DynamicState).init(device, false, dynamic_state);
+        const constant_state_buffer = buffers.Uniform(gpu_structs.ConstantState).init(device, false, gpu_structs.ConstantState.from(&ornament_ctx.state, textures.len));
+        const camera_buffer = buffers.Uniform(gpu_structs.Camera).init(device, false, gpu_structs.Camera.from(&ornament_ctx.scene.camera));
 
-        const materials_buffer = buffers.Storage(wgsl_structs.Material).init(device, false, .{ .data = bvh.materials.items });
-        const tlas_nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.tlas_nodes.items });
-        const blas_nodes_buffer = buffers.Storage(wgsl_structs.Node).init(device, false, .{ .data = bvh.blas_nodes.items });
-        const normals_buffer = buffers.Storage(wgsl_structs.Normal).init(device, false, .{ .data = bvh.normals.items });
+        const materials_buffer = buffers.Storage(gpu_structs.Material).init(device, false, .{ .data = bvh.materials.items });
+        const tlas_nodes_buffer = buffers.Storage(gpu_structs.Node).init(device, false, .{ .data = bvh.tlas_nodes.items });
+        const blas_nodes_buffer = buffers.Storage(gpu_structs.Node).init(device, false, .{ .data = bvh.blas_nodes.items });
+        const normals_buffer = buffers.Storage(gpu_structs.Normal).init(device, false, .{ .data = bvh.normals.items });
         const normal_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.normal_indices.items });
-        const uvs_buffer = buffers.Storage(wgsl_structs.Uv).init(device, false, .{ .data = bvh.uvs.items });
+        const uvs_buffer = buffers.Storage(gpu_structs.Uv).init(device, false, .{ .data = bvh.uvs.items });
         const uv_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.uv_indices.items });
-        const transforms_buffer = buffers.Storage(wgsl_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
+        const transforms_buffer = buffers.Storage(gpu_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
 
         const code = @embedFile("shaders/pathtracer.wgsl") ++ "\n" ++
             @embedFile("shaders/bvh.wgsl") ++ "\n" ++
@@ -349,13 +350,13 @@ pub const PathTracer = struct {
         if (scene.camera.dirty) {
             dirty = true;
             scene.camera.dirty = false;
-            self.camera_buffer.write(self.queue, wgsl_structs.Camera.from(&scene.camera));
+            self.camera_buffer.write(self.queue, gpu_structs.Camera.from(&scene.camera));
         }
 
         if (state.dirty) {
             dirty = true;
             state.dirty = false;
-            self.constant_state_buffer.write(self.queue, wgsl_structs.ConstantState.from(state, self.textures.len));
+            self.constant_state_buffer.write(self.queue, gpu_structs.ConstantState.from(state, self.textures.len));
         }
 
         if (dirty) self.reset();

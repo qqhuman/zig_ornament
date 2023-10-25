@@ -1,6 +1,6 @@
 const std = @import("std");
 const zmath = @import("zmath");
-const ornament = @import("../ornament.zig");
+const ornament = @import("ornament.zig");
 
 pub const TARGET_PIXEL_COMPONENTS: u32 = 4;
 pub const Resolution = [2]u32;

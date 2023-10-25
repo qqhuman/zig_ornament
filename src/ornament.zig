@@ -1,9 +1,12 @@
+pub const wgpu_backend = @import("wgpu_backend/backend.zig");
+pub const hip = @import("hip_backend/hip.zig");
+pub const Resolution = util.Resolution;
+
 const std = @import("std");
 const zmath = @import("zmath");
 const util = @import("util.zig");
 const math = @import("math.zig");
-const WgpuContext = @import("wgpu/wgpu_context.zig").WgpuContext;
-const PathTracer = @import("wgpu/path_tracer.zig").PathTracer;
+const WgpuContext = wgpu_backend.WgpuContext;
 const materials = @import("materials/material.zig");
 pub const Material = materials.Material;
 pub const Texture = @import("materials/texture.zig").Texture;
@@ -15,11 +18,6 @@ pub const Aabb = geometry.Aabb;
 pub const Sphere = geometry.Sphere;
 pub const Mesh = geometry.Mesh;
 pub const MeshInstance = geometry.MeshInstance;
-pub const hip = @import("hip/hip.zig");
-pub const wgpu = @import("wgpu/wgpu.zig");
-pub const webgpu = @import("wgpu/webgpu.zig");
-pub const Viewport = @import("wgpu/viewport.zig").Viewport;
-pub const Resolution = util.Resolution;
 
 pub const Context = struct {
     const Self = @This();
@@ -31,10 +29,10 @@ pub const Context = struct {
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
     textures: std.ArrayList(*Texture),
-    path_tracer: ?PathTracer,
+    path_tracer: ?wgpu_backend.Backend,
     wgpu_context: WgpuContext,
 
-    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
+    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu_backend.webgpu.SurfaceDescriptor) !Self {
         return .{
             .allocator = allocator,
             .state = State.init(),
@@ -113,9 +111,9 @@ pub const Context = struct {
         return self.state.getRayCastEpsilon();
     }
 
-    fn getOrCreatePathTracer(self: *Self) !*PathTracer {
+    fn getOrCreateBackend(self: *Self) !*wgpu_backend.Backend {
         if (self.path_tracer == null) {
-            var pt = try PathTracer.init(self.allocator, self.wgpu_context.device, self.wgpu_context.queue, self);
+            var pt = try wgpu_backend.Backend.init(self.allocator, self.wgpu_context.device, self.wgpu_context.queue, self);
             self.path_tracer = pt;
             std.log.debug("[ornament] path tracer was created", .{});
         }
@@ -123,18 +121,18 @@ pub const Context = struct {
         return &self.path_tracer.?;
     }
 
-    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: webgpu.ShaderStage, read_only: bool) !webgpu.BindGroupLayoutEntry {
-        var path_tracer = try self.getOrCreatePathTracer();
+    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu_backend.webgpu.ShaderStage, read_only: bool) !wgpu_backend.webgpu.BindGroupLayoutEntry {
+        var path_tracer = try self.getOrCreateBackend();
         return path_tracer.targetBufferLayout(binding, visibility, read_only);
     }
 
-    pub fn targetBufferBinding(self: *Self, binding: u32) !webgpu.BindGroupEntry {
-        var path_tracer = try self.getOrCreatePathTracer();
+    pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu_backend.webgpu.BindGroupEntry {
+        var path_tracer = try self.getOrCreateBackend();
         return path_tracer.targetBufferBinding(binding);
     }
 
     pub fn render(self: *Self) !void {
-        var path_tracer = try self.getOrCreatePathTracer();
+        var path_tracer = try self.getOrCreateBackend();
         if (self.state.iterations > 1) {
             var i: u32 = 0;
             while (i < self.state.iterations) : (i += 1) {

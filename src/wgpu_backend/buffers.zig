@@ -3,14 +3,14 @@ const ornament = @import("../ornament.zig");
 const webgpu = @import("webgpu.zig");
 const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 const util = @import("../util.zig");
-const wgsl_structs = @import("wgsl_structs.zig");
+const gpu_structs = @import("../gpu_structs.zig");
 
 pub const WORKGROUP_SIZE: u32 = 256;
 
 pub const Target = struct {
     const Self = @This();
-    buffer: Storage(wgsl_structs.Vector4),
-    accumulation_buffer: Storage(wgsl_structs.Vector4),
+    buffer: Storage(gpu_structs.Vector4),
+    accumulation_buffer: Storage(gpu_structs.Vector4),
     rng_state_buffer: Storage(u32),
     pixels_count: u32,
     resolution: util.Resolution,
@@ -18,8 +18,8 @@ pub const Target = struct {
 
     pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, resolution: util.Resolution) !Self {
         const pixels_count = resolution.width * resolution.height;
-        const buffer = Storage(wgsl_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
-        const accumulation_buffer = Storage(wgsl_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
+        const buffer = Storage(gpu_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
+        const accumulation_buffer = Storage(gpu_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
 
         var rng_seed = try allocator.alloc(u32, pixels_count);
         defer allocator.free(rng_seed);
