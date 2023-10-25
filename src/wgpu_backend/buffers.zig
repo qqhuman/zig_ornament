@@ -1,7 +1,6 @@
 const std = @import("std");
 const ornament = @import("../ornament.zig");
 const webgpu = @import("webgpu.zig");
-const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 const util = @import("../util.zig");
 const gpu_structs = @import("../gpu_structs.zig");
 

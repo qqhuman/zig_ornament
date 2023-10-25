@@ -18,18 +18,18 @@ pub const Viewport = struct {
             .code = @embedFile("viewport.wgsl"),
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
-        const shader_module = ornament_ctx.wgpu_context.device.createShaderModule(.{
+        const shader_module = ornament_ctx.backend_context.device.createShaderModule(.{
             .next_in_chain = @ptrCast(&wgsl_descriptor),
             .label = "[glfw_example] wgpu viewport shader module",
         });
 
         var resolution = ornament_ctx.getResolution();
 
-        const surface = ornament_ctx.wgpu_context.surface orelse @panic("WGPUSurface is empty.");
-        const surface_capabilities = surface.getCapabilities(ornament_ctx.wgpu_context.adapter);
+        const surface = ornament_ctx.backend_context.surface orelse @panic("WGPUSurface is empty.");
+        const surface_capabilities = surface.getCapabilities(ornament_ctx.backend_context.adapter);
         const format = webgpu.TextureFormat.bgra8_unorm;
         surface.configure(&.{
-            .device = ornament_ctx.wgpu_context.device,
+            .device = ornament_ctx.backend_context.device,
             .width = resolution.width,
             .height = resolution.height,
             .usage = .{ .render_attachment = true },
@@ -39,7 +39,7 @@ pub const Viewport = struct {
         });
 
         const dimensions_buffer = ornament.wgpu_backend.buffers.Uniform([2]u32).init(
-            ornament_ctx.wgpu_context.device,
+            ornament_ctx.backend_context.device,
             false,
             [2]u32{ resolution.width, resolution.height },
         );
@@ -58,7 +58,7 @@ pub const Viewport = struct {
                 try ornament_ctx.targetBufferLayout(0, .{ .fragment = true }, true),
                 dimensions_buffer.layout(1, .{ .fragment = true }),
             };
-            const bind_group_layout = ornament_ctx.wgpu_context.device.createBindGroupLayout(.{
+            const bind_group_layout = ornament_ctx.backend_context.device.createBindGroupLayout(.{
                 .label = "[glfw_example] wgpu viewport render bgl",
                 .entry_count = bind_group_layout_entries.len,
                 .entries = &bind_group_layout_entries,
@@ -69,7 +69,7 @@ pub const Viewport = struct {
                 try ornament_ctx.targetBufferBinding(0),
                 dimensions_buffer.binding(1),
             };
-            const bind_group = ornament_ctx.wgpu_context.device.createBindGroup(.{
+            const bind_group = ornament_ctx.backend_context.device.createBindGroup(.{
                 .label = "[glfw_example] wgpu viewport render bl",
                 .layout = bind_group_layout,
                 .entry_count = bind_group_entries.len,
@@ -77,7 +77,7 @@ pub const Viewport = struct {
             });
 
             const bind_group_layouts = [_]webgpu.BindGroupLayout{bind_group_layout};
-            const pipeline_layout = ornament_ctx.wgpu_context.device.createPipelineLayout(.{
+            const pipeline_layout = ornament_ctx.backend_context.device.createPipelineLayout(.{
                 .label = "[glfw_example] wgpu viewport render pl",
                 .bind_group_layout_count = bind_group_layouts.len,
                 .bind_group_layouts = &bind_group_layouts,
@@ -86,7 +86,7 @@ pub const Viewport = struct {
 
             break :ppl .{
                 .bind_group = bind_group,
-                .render_pipeline = ornament_ctx.wgpu_context.device.createRenderPipeline(.{
+                .render_pipeline = ornament_ctx.backend_context.device.createRenderPipeline(.{
                     .label = "[glfw_example] wgpu viewport render pipeline",
                     .layout = pipeline_layout,
                     .vertex = .{ .entry_point = "vs_main", .module = shader_module },
@@ -107,8 +107,8 @@ pub const Viewport = struct {
 
         return .{
             .surface = surface,
-            .device = ornament_ctx.wgpu_context.device,
-            .queue = ornament_ctx.wgpu_context.queue,
+            .device = ornament_ctx.backend_context.device,
+            .queue = ornament_ctx.backend_context.queue,
             .shader_module = shader_module,
             .render_pipeline = pipeline.render_pipeline,
             .bind_group = pipeline.bind_group,

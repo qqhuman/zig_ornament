@@ -6,7 +6,6 @@ const std = @import("std");
 const zmath = @import("zmath");
 const util = @import("util.zig");
 const math = @import("math.zig");
-const WgpuContext = wgpu_backend.WgpuContext;
 const materials = @import("materials/material.zig");
 pub const Material = materials.Material;
 pub const Texture = @import("materials/texture.zig").Texture;
@@ -29,8 +28,8 @@ pub const Context = struct {
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
     textures: std.ArrayList(*Texture),
-    path_tracer: ?wgpu_backend.Backend,
-    wgpu_context: WgpuContext,
+    backend: ?wgpu_backend.Backend,
+    backend_context: wgpu_backend.Context,
 
     pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu_backend.webgpu.SurfaceDescriptor) !Self {
         return .{
@@ -42,14 +41,14 @@ pub const Context = struct {
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
             .textures = std.ArrayList(*Texture).init(allocator),
-            .wgpu_context = try WgpuContext.init(allocator, surface_descriptor),
-            .path_tracer = null,
+            .backend_context = try wgpu_backend.Context.init(allocator, surface_descriptor),
+            .backend = null,
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.scene.deinit();
-        if (self.path_tracer) |*pt| pt.deinit();
+        if (self.backend) |*pt| pt.deinit();
         self.destroyElements(&self.spheres);
         for (self.meshes.items) |m| m.deinit();
         self.destroyElements(&self.meshes);
@@ -57,7 +56,7 @@ pub const Context = struct {
         self.destroyElements(&self.materials);
         for (self.textures.items) |t| t.deinit();
         self.destroyElements(&self.textures);
-        self.wgpu_context.deinit();
+        self.backend_context.deinit();
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -94,7 +93,7 @@ pub const Context = struct {
 
     pub fn setResolution(self: *Self, resolution: Resolution) !void {
         self.state.setResolution(resolution);
-        if (self.path_tracer) |*pt| {
+        if (self.backend) |*pt| {
             pt.setResolution(resolution);
         }
     }
@@ -112,37 +111,37 @@ pub const Context = struct {
     }
 
     fn getOrCreateBackend(self: *Self) !*wgpu_backend.Backend {
-        if (self.path_tracer == null) {
-            var pt = try wgpu_backend.Backend.init(self.allocator, self.wgpu_context.device, self.wgpu_context.queue, self);
-            self.path_tracer = pt;
+        if (self.backend == null) {
+            var pt = try wgpu_backend.Backend.init(self.allocator, self.backend_context.device, self.backend_context.queue, self);
+            self.backend = pt;
             std.log.debug("[ornament] path tracer was created", .{});
         }
 
-        return &self.path_tracer.?;
+        return &self.backend.?;
     }
 
     pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu_backend.webgpu.ShaderStage, read_only: bool) !wgpu_backend.webgpu.BindGroupLayoutEntry {
-        var path_tracer = try self.getOrCreateBackend();
-        return path_tracer.targetBufferLayout(binding, visibility, read_only);
+        var backend = try self.getOrCreateBackend();
+        return backend.targetBufferLayout(binding, visibility, read_only);
     }
 
     pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu_backend.webgpu.BindGroupEntry {
-        var path_tracer = try self.getOrCreateBackend();
-        return path_tracer.targetBufferBinding(binding);
+        var backend = try self.getOrCreateBackend();
+        return backend.targetBufferBinding(binding);
     }
 
     pub fn render(self: *Self) !void {
-        var path_tracer = try self.getOrCreateBackend();
+        var backend = try self.getOrCreateBackend();
         if (self.state.iterations > 1) {
             var i: u32 = 0;
             while (i < self.state.iterations) : (i += 1) {
-                path_tracer.update(&self.state, &self.scene);
-                try path_tracer.render();
+                backend.update(&self.state, &self.scene);
+                try backend.render();
             }
-            try path_tracer.post_processing();
+            try backend.post_processing();
         } else {
-            path_tracer.update(&self.state, &self.scene);
-            try path_tracer.render_and_apply_post_processing();
+            backend.update(&self.state, &self.scene);
+            try backend.render_and_apply_post_processing();
         }
     }
 

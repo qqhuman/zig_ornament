@@ -1,7 +1,7 @@
 pub const wgpu = @import("wgpu.zig");
 pub const webgpu = @import("webgpu.zig");
 pub const buffers = @import("buffers.zig");
-pub const WgpuContext = @import("wgpu_context.zig").WgpuContext;
+pub const Context = @import("context.zig").Context;
 
 const std = @import("std");
 const gpu_structs = @import("../gpu_structs.zig");
