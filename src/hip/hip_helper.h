@@ -32,6 +32,7 @@ inline void __checkHipErrors(hipError_t err, const char *file, const int line) {
             "checkHipErrors() HIP API error = %04d \"%s\" from file <%s>, "
             "line %i.\n",
             err, errorStr, file, line);
+    hipDeviceReset();
     exit(EXIT_FAILURE);
   }
 }
