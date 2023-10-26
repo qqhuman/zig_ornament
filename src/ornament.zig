@@ -29,7 +29,7 @@ pub const Ornament = struct {
     mesh_instances: std.ArrayList(*MeshInstance),
     textures: std.ArrayList(*Texture),
     backend: ?wgpu_backend.Backend,
-    backend_context: wgpu_backend.Context,
+    backend_device_state: wgpu_backend.DeviceState,
 
     pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu_backend.webgpu.SurfaceDescriptor) !Self {
         return .{
@@ -41,7 +41,7 @@ pub const Ornament = struct {
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
             .textures = std.ArrayList(*Texture).init(allocator),
-            .backend_context = try wgpu_backend.Context.init(allocator, surface_descriptor),
+            .backend_device_state = try wgpu_backend.DeviceState.init(allocator, surface_descriptor),
             .backend = null,
         };
     }
@@ -56,7 +56,7 @@ pub const Ornament = struct {
         self.destroyElements(&self.materials);
         for (self.textures.items) |t| t.deinit();
         self.destroyElements(&self.textures);
-        self.backend_context.deinit();
+        self.backend_device_state.deinit();
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -112,7 +112,7 @@ pub const Ornament = struct {
 
     fn getOrCreateBackend(self: *Self) !*wgpu_backend.Backend {
         if (self.backend == null) {
-            var backend = try wgpu_backend.Backend.init(self.allocator, self.backend_context.device, self.backend_context.queue, self);
+            var backend = try wgpu_backend.Backend.init(self.allocator, self.backend_device_state.device, self.backend_device_state.queue, self);
             self.backend = backend;
             std.log.debug("[ornament] path tracer was created", .{});
         }

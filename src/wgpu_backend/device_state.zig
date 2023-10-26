@@ -6,7 +6,7 @@ pub const WgpuError = error{
     DeviceRequestFailed,
 };
 
-pub const Context = struct {
+pub const DeviceState = struct {
     const Self = @This();
     instance: webgpu.Instance,
     surface: ?webgpu.Surface,
