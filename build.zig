@@ -90,7 +90,7 @@ pub fn package(
     const build_hip_kernals = b.addSystemCommand(&.{
         "hipcc",
         "--genco",
-        "--offload-arch=gfx1030",
+        "--offload-arch=gfx1031",
         "-o",
         b.pathJoin(&.{ b.exe_dir, "pathtracer.co" }),
         "src/hip/kernels/pathtracer.cpp",

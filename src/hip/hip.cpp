@@ -54,7 +54,8 @@ extern "C" void run(void) {
     float* gpuTransposeMatrix;
 
     hipDeviceProp_t devProp;
-    checkHipErrors(hipGetDeviceProperties(&devProp, 0));
+    checkHipErrors(hipGetDeviceProperties(&devProp, 1));
+    checkHipErrors(hipSetDevice(1));
 
     std::cout << "Device name " << devProp.name << std::endl;
 
