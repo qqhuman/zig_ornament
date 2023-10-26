@@ -13,7 +13,7 @@ pub const Viewport = struct {
     resolution: ornament.Resolution,
     dimensions_buffer: ornament.wgpu_backend.buffers.Uniform([2]u32),
 
-    pub fn init(ornament_ctx: *ornament.Context) !Self {
+    pub fn init(ornament_ctx: *ornament.Ornament) !Self {
         var wgsl_descriptor = webgpu.ShaderModuleWgslDescriptor{
             .code = @embedFile("viewport.wgsl"),
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },

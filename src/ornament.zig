@@ -18,7 +18,7 @@ pub const Sphere = geometry.Sphere;
 pub const Mesh = geometry.Mesh;
 pub const MeshInstance = geometry.MeshInstance;
 
-pub const Context = struct {
+pub const Ornament = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     state: State,

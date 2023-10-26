@@ -37,7 +37,7 @@ pub const Backend = struct {
     shader_module: webgpu.ShaderModule,
     pipelines: ?WgpuPipelines,
 
-    pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, queue: webgpu.Queue, ornament_ctx: *const ornament.Context) !Self {
+    pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, queue: webgpu.Queue, ornament_ctx: *const ornament.Ornament) !Self {
         const bvh = try Bvh.init(allocator, ornament_ctx);
         const resolution = ornament_ctx.state.getResolution();
 

@@ -30,7 +30,7 @@ fn randomColorBetween(min: f32, max: f32) zmath.Vec {
     );
 }
 
-pub fn init_spheres(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_spheres(ornament_ctx: *ornament.Ornament, aspect_ratio: f32) !void {
     const vfov = 20.0;
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
@@ -90,7 +90,7 @@ pub fn init_spheres(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
     ));
 }
 
-pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Ornament, aspect_ratio: f32) !void {
     const vfov = 20.0;
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
@@ -213,7 +213,7 @@ pub fn init_lucy_spheres_with_textures(ornament_ctx: *ornament.Context, aspect_r
     ));
 }
 
-pub fn init_spheres_and_meshes_spheres(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_spheres_and_meshes_spheres(ornament_ctx: *ornament.Ornament, aspect_ratio: f32) !void {
     const vfov = 20.0;
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
@@ -278,7 +278,7 @@ pub fn init_spheres_and_meshes_spheres(ornament_ctx: *ornament.Context, aspect_r
     }
 }
 
-pub fn init_spheres_and_3_lucy(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_spheres_and_3_lucy(ornament_ctx: *ornament.Ornament, aspect_ratio: f32) !void {
     const vfov = 20.0;
     const lookfrom = zmath.f32x4(13.0, 2.0, 3.0, 1.0);
     const lookat = zmath.f32x4(0.0, 0.0, 0.0, 1.0);
@@ -356,7 +356,7 @@ pub fn quadCenterFromBook(q: zmath.Vec, u: zmath.Vec, v: zmath.Vec) zmath.Vec {
     return q + u * zmath.f32x4s(0.5) + v * zmath.f32x4s(0.5);
 }
 
-pub fn init_empty_cornell_box(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_empty_cornell_box(ornament_ctx: *ornament.Ornament, aspect_ratio: f32) !void {
     const vfov = 40.0;
     const lookfrom = zmath.f32x4(278.0, 278.0, -800.0, 1.0);
     const lookat = zmath.f32x4(278.0, 278.0, 0.0, 1.0);
@@ -455,7 +455,7 @@ pub fn init_empty_cornell_box(ornament_ctx: *ornament.Context, aspect_ratio: f32
     ));
 }
 
-pub fn init_cornell_box_with_lucy(ornament_ctx: *ornament.Context, aspect_ratio: f32) !void {
+pub fn init_cornell_box_with_lucy(ornament_ctx: *ornament.Ornament, aspect_ratio: f32) !void {
     try init_empty_cornell_box(ornament_ctx, aspect_ratio);
     var height: f32 = 400.0;
     var mesh = try loadMesh(
@@ -502,7 +502,7 @@ fn loadTexture(allocator: std.mem.Allocator, texturename: []const u8, forced_num
     return zstbi.Image.loadFromFile(texturepath, forced_num_components);
 }
 
-fn loadMesh(allocator: std.mem.Allocator, modelname: [:0]const u8, ornament_ctx: *ornament.Context, transform: zmath.Mat, material: *ornament.Material) !*ornament.Mesh {
+fn loadMesh(allocator: std.mem.Allocator, modelname: [:0]const u8, ornament_ctx: *ornament.Ornament, transform: zmath.Mat, material: *ornament.Material) !*ornament.Mesh {
     const exe_dir_path = std.fs.selfExeDirPathAlloc(allocator) catch unreachable;
     defer allocator.free(exe_dir_path);
     const modelpath = std.fs.path.joinZ(allocator, &.{

@@ -29,7 +29,7 @@ pub const Bvh = struct {
     materials: std.ArrayList(gpu_structs.Material),
     textures: std.ArrayList(*ornament.Texture),
 
-    pub fn init(allocator: std.mem.Allocator, ornament_ctx: *const ornament.Context) std.mem.Allocator.Error!Self {
+    pub fn init(allocator: std.mem.Allocator, ornament_ctx: *const ornament.Ornament) std.mem.Allocator.Error!Self {
         const shapes_count = ornament_ctx.scene.spheres.items.len + ornament_ctx.scene.meshes.items.len + ornament_ctx.scene.mesh_instances.items.len;
         if (shapes_count == 0) {
             @panic("[ornament] scene cannot be empty.");

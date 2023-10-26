@@ -26,7 +26,7 @@ const App = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     window: *zglfw.Window,
-    ornament: ornament.Context,
+    ornament: ornament.Ornament,
     viewport: ?Viewport,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
@@ -43,7 +43,7 @@ const App = struct {
             .hwnd = try zglfw.native.getWin32Window(window),
             .hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable,
         };
-        var ornament_context = try ornament.Context.init(
+        var ornament_context = try ornament.Ornament.init(
             allocator,
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
