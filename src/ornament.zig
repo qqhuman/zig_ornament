@@ -48,7 +48,7 @@ pub const Ornament = struct {
 
     pub fn deinit(self: *Self) void {
         self.scene.deinit();
-        if (self.backend) |*pt| pt.deinit();
+        if (self.backend) |*backend| backend.deinit();
         self.destroyElements(&self.spheres);
         for (self.meshes.items) |m| m.deinit();
         self.destroyElements(&self.meshes);
@@ -93,8 +93,8 @@ pub const Ornament = struct {
 
     pub fn setResolution(self: *Self, resolution: Resolution) !void {
         self.state.setResolution(resolution);
-        if (self.backend) |*pt| {
-            pt.setResolution(resolution);
+        if (self.backend) |*backend| {
+            backend.setResolution(resolution);
         }
     }
 
@@ -112,8 +112,8 @@ pub const Ornament = struct {
 
     fn getOrCreateBackend(self: *Self) !*wgpu_backend.Backend {
         if (self.backend == null) {
-            var pt = try wgpu_backend.Backend.init(self.allocator, self.backend_context.device, self.backend_context.queue, self);
-            self.backend = pt;
+            var backend = try wgpu_backend.Backend.init(self.allocator, self.backend_context.device, self.backend_context.queue, self);
+            self.backend = backend;
             std.log.debug("[ornament] path tracer was created", .{});
         }
 
