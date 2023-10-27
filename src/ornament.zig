@@ -108,17 +108,7 @@ pub const Ornament = struct {
     }
 
     pub fn render(self: *Self) !void {
-        if (self.state.iterations > 1) {
-            var i: u32 = 0;
-            while (i < self.state.iterations) : (i += 1) {
-                self.backend.update(&self.state, &self.scene);
-                try self.backend.render(self);
-            }
-            try self.backend.post_processing(self);
-        } else {
-            self.backend.update(&self.state, &self.scene);
-            try self.backend.render_and_apply_post_processing(self);
-        }
+        return self.backend.render(self);
     }
 
     pub fn lambertian(self: *Self, albedo: Color) std.mem.Allocator.Error!*Material {

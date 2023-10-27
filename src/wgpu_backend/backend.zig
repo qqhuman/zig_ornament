@@ -153,18 +153,18 @@ pub const Backend = struct {
         self.dynamic_state.reset();
     }
 
-    pub fn update(self: *Self, state: *ornament.State, scene: *ornament.Scene) void {
+    pub fn update(self: *Self, ornament_ctx: *ornament.Ornament) void {
         var dirty = false;
-        if (scene.camera.dirty) {
+        if (ornament_ctx.scene.camera.dirty) {
             dirty = true;
-            scene.camera.dirty = false;
-            self.camera_buffer.write(self.device_state.queue, gpu_structs.Camera.from(&scene.camera));
+            ornament_ctx.scene.camera.dirty = false;
+            self.camera_buffer.write(self.device_state.queue, gpu_structs.Camera.from(&ornament_ctx.scene.camera));
         }
 
-        if (state.dirty) {
+        if (ornament_ctx.state.dirty) {
             dirty = true;
-            state.dirty = false;
-            self.constant_state_buffer.write(self.device_state.queue, gpu_structs.ConstantState.from(state));
+            ornament_ctx.state.dirty = false;
+            self.constant_state_buffer.write(self.device_state.queue, gpu_structs.ConstantState.from(&ornament_ctx.state));
         }
 
         if (dirty) self.reset();
@@ -194,22 +194,22 @@ pub const Backend = struct {
         defer command.release();
 
         self.device_state.queue.submit(&[_]webgpu.CommandBuffer{command});
-        _ = @import("wgpu.zig").wgpuDevicePoll(self.device_state.device, true, null);
+        _ = wgpu.wgpuDevicePoll(self.device_state.device, true, null);
     }
 
-    pub fn render(self: *Self, ornamnet_ctx: *const ornament.Ornament) !void {
-        const pipeline = try self.getOrCreatePipeline(ornamnet_ctx);
-        return self.runPipeline(pipeline.path_tracing, pipeline.bind_groups, "path tracing");
-    }
-
-    pub fn post_processing(self: *Self, ornamnet_ctx: *const ornament.Ornament) !void {
-        const pipeline = try self.getOrCreatePipeline(ornamnet_ctx);
-        return self.runPipeline(pipeline.post_processing, pipeline.bind_groups, "post processing");
-    }
-
-    pub fn render_and_apply_post_processing(self: *Self, ornamnet_ctx: *const ornament.Ornament) !void {
-        const pipeline = try self.getOrCreatePipeline(ornamnet_ctx);
-        return self.runPipeline(pipeline.path_tracing_and_post_processing, pipeline.bind_groups, "path tracing and post processing");
+    pub fn render(self: *Self, ornament_ctx: *ornament.Ornament) !void {
+        const pipeline = try self.getOrCreatePipeline(ornament_ctx);
+        if (ornament_ctx.state.iterations > 1) {
+            var i: u32 = 0;
+            while (i < ornament_ctx.state.iterations) : (i += 1) {
+                self.update(ornament_ctx);
+                try self.runPipeline(pipeline.path_tracing, pipeline.bind_groups, "path tracing");
+            }
+            try self.runPipeline(pipeline.post_processing, pipeline.bind_groups, "post processing");
+        } else {
+            self.update(ornament_ctx);
+            try self.runPipeline(pipeline.path_tracing_and_post_processing, pipeline.bind_groups, "path tracing and post processing");
+        }
     }
 };
 
