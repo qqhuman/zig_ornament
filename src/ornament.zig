@@ -28,27 +28,27 @@ pub const Ornament = struct {
     meshes: std.ArrayList(*Mesh),
     mesh_instances: std.ArrayList(*MeshInstance),
     textures: std.ArrayList(*Texture),
-    backend: ?wgpu_backend.Backend,
-    backend_device_state: wgpu_backend.DeviceState,
+    backend: wgpu_backend.Backend,
 
     pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu_backend.webgpu.SurfaceDescriptor) !Self {
+        const state = State.init();
+        const scene = Scene.init(allocator);
         return .{
             .allocator = allocator,
-            .state = State.init(),
-            .scene = Scene.init(allocator),
+            .state = state,
+            .scene = scene,
             .materials = std.ArrayList(*Material).init(allocator),
             .spheres = std.ArrayList(*Sphere).init(allocator),
             .meshes = std.ArrayList(*Mesh).init(allocator),
             .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
             .textures = std.ArrayList(*Texture).init(allocator),
-            .backend_device_state = try wgpu_backend.DeviceState.init(allocator, surface_descriptor),
-            .backend = null,
+            .backend = try wgpu_backend.Backend.init(allocator, surface_descriptor, &scene, &state),
         };
     }
 
     pub fn deinit(self: *Self) void {
+        self.backend.deinit();
         self.scene.deinit();
-        if (self.backend) |*backend| backend.deinit();
         self.destroyElements(&self.spheres);
         for (self.meshes.items) |m| m.deinit();
         self.destroyElements(&self.meshes);
@@ -56,7 +56,6 @@ pub const Ornament = struct {
         self.destroyElements(&self.materials);
         for (self.textures.items) |t| t.deinit();
         self.destroyElements(&self.textures);
-        self.backend_device_state.deinit();
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -93,9 +92,7 @@ pub const Ornament = struct {
 
     pub fn setResolution(self: *Self, resolution: Resolution) !void {
         self.state.setResolution(resolution);
-        if (self.backend) |*backend| {
-            backend.setResolution(resolution);
-        }
+        self.backend.setResolution(resolution);
     }
 
     pub fn getResolution(self: Self) Resolution {
@@ -110,38 +107,17 @@ pub const Ornament = struct {
         return self.state.getRayCastEpsilon();
     }
 
-    fn getOrCreateBackend(self: *Self) !*wgpu_backend.Backend {
-        if (self.backend == null) {
-            var backend = try wgpu_backend.Backend.init(self.allocator, self.backend_device_state.device, self.backend_device_state.queue, self);
-            self.backend = backend;
-            std.log.debug("[ornament] path tracer was created", .{});
-        }
-
-        return &self.backend.?;
-    }
-
-    pub fn targetBufferLayout(self: *Self, binding: u32, visibility: wgpu_backend.webgpu.ShaderStage, read_only: bool) !wgpu_backend.webgpu.BindGroupLayoutEntry {
-        var backend = try self.getOrCreateBackend();
-        return backend.targetBufferLayout(binding, visibility, read_only);
-    }
-
-    pub fn targetBufferBinding(self: *Self, binding: u32) !wgpu_backend.webgpu.BindGroupEntry {
-        var backend = try self.getOrCreateBackend();
-        return backend.targetBufferBinding(binding);
-    }
-
     pub fn render(self: *Self) !void {
-        var backend = try self.getOrCreateBackend();
         if (self.state.iterations > 1) {
             var i: u32 = 0;
             while (i < self.state.iterations) : (i += 1) {
-                backend.update(&self.state, &self.scene);
-                try backend.render();
+                self.backend.update(&self.state, &self.scene);
+                try self.backend.render(self);
             }
-            try backend.post_processing();
+            try self.backend.post_processing(self);
         } else {
-            backend.update(&self.state, &self.scene);
-            try backend.render_and_apply_post_processing();
+            self.backend.update(&self.state, &self.scene);
+            try self.backend.render_and_apply_post_processing(self);
         }
     }
 
@@ -421,6 +397,7 @@ pub const Ornament = struct {
     }
 
     pub fn createTexture(self: *Self, data: []u8, width: u32, height: u32, num_components: u32, bytes_per_component: u32, is_hdr: bool, gamma: f32) !*Texture {
+        self.state.setTexturesCount(self.textures.items.len + 1);
         return self.addElement(try Texture.init(
             self.allocator,
             data,
@@ -431,6 +408,10 @@ pub const Ornament = struct {
             is_hdr,
             gamma,
         ), &self.textures);
+    }
+
+    pub fn releaseTexture(self: *Self, texture: *const Texture) void {
+        self.releaseElement(texture, self.textures);
     }
 
     fn addElement(self: *Self, to_add: anytype, list: *std.ArrayList(*@TypeOf(to_add))) std.mem.Allocator.Error!*@TypeOf(to_add) {
@@ -463,7 +444,8 @@ pub const State = struct {
     inverted_gamma: f32,
     iterations: u32,
     ray_cast_epsilon: f32,
-    dirty: bool = true,
+    textures_count: u32,
+    dirty: bool,
 
     pub fn init() Self {
         return .{
@@ -473,6 +455,7 @@ pub const State = struct {
             .inverted_gamma = 1.0,
             .iterations = 1,
             .ray_cast_epsilon = 0.001,
+            .textures_count = 0,
             .dirty = true,
         };
     }
@@ -533,5 +516,14 @@ pub const State = struct {
 
     pub fn getRayCastEpsilon(self: Self) f32 {
         return self.ray_cast_epsilon;
+    }
+
+    pub fn setTexturesCount(self: *Self, count: u32) void {
+        self.textures_count = count;
+        self.makeDirty();
+    }
+
+    pub fn getTexturesCount(self: Self) u32 {
+        return self.textures_count;
     }
 };
