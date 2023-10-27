@@ -239,6 +239,24 @@ pub const StorageBuffers = struct {
         const uv_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.uv_indices.items });
         const transforms_buffer = buffers.Storage(gpu_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
 
+        log("materials_buffer", bvh.materials.items.len, materials_buffer.padded_size_in_bytes);
+        log("tlas_nodes_buffer", bvh.tlas_nodes.items.len, tlas_nodes_buffer.padded_size_in_bytes);
+        log("blas_nodes_buffer", bvh.blas_nodes.items.len, blas_nodes_buffer.padded_size_in_bytes);
+        log("normals_buffer", bvh.normals.items.len, normals_buffer.padded_size_in_bytes);
+        log("normal_indices_buffer", bvh.normal_indices.items.len, normal_indices_buffer.padded_size_in_bytes);
+        log("uvs_buffer", bvh.uvs.items.len, uvs_buffer.padded_size_in_bytes);
+        log("uv_indices_buffer", bvh.uv_indices.items.len, uv_indices_buffer.padded_size_in_bytes);
+        log("transforms_buffer", bvh.transforms.items.len, transforms_buffer.padded_size_in_bytes);
+        const bytes = materials_buffer.padded_size_in_bytes +
+            tlas_nodes_buffer.padded_size_in_bytes +
+            blas_nodes_buffer.padded_size_in_bytes +
+            normals_buffer.padded_size_in_bytes +
+            normal_indices_buffer.padded_size_in_bytes +
+            uvs_buffer.padded_size_in_bytes +
+            uv_indices_buffer.padded_size_in_bytes +
+            transforms_buffer.padded_size_in_bytes;
+        std.log.debug("[ornament], all buff bytes = {d}, mb = {d}", .{ bytes, bytes / (1024 * 1024) });
+
         return .{
             .bvh = bvh,
             .textures = textures,
@@ -252,6 +270,10 @@ pub const StorageBuffers = struct {
             .tlas_nodes_buffer = tlas_nodes_buffer,
             .blas_nodes_buffer = blas_nodes_buffer,
         };
+    }
+
+    fn log(comptime buf_name: []const u8, elem_count: usize, buff_size: u64) void {
+        std.log.debug("[ornament] {s}, elements = {d}, bytes = {d}", .{ buf_name, elem_count, buff_size });
     }
 
     pub fn deinit(self: *Self) void {
