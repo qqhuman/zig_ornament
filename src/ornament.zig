@@ -62,7 +62,7 @@ pub const Ornament = struct {
         self.state.setFlipY(flip_y);
     }
 
-    pub fn getFlipY(self: Self) bool {
+    pub fn getFlipY(self: *const Self) bool {
         return self.state.getFlipY();
     }
 
@@ -70,7 +70,7 @@ pub const Ornament = struct {
         self.state.setGamma(gamma);
     }
 
-    pub fn getGamma(self: Self) f32 {
+    pub fn getGamma(self: *const Self) f32 {
         return self.state.getGamma();
     }
 
@@ -78,7 +78,7 @@ pub const Ornament = struct {
         self.state.setDepth(depth);
     }
 
-    pub fn getDepth(self: Self) u32 {
+    pub fn getDepth(self: *const Self) u32 {
         return self.state.getDepth();
     }
 
@@ -86,7 +86,7 @@ pub const Ornament = struct {
         self.state.setIterations(iterations);
     }
 
-    pub fn getIterations(self: Self) u32 {
+    pub fn getIterations(self: *const Self) u32 {
         return self.state.getIterations();
     }
 
@@ -95,7 +95,7 @@ pub const Ornament = struct {
         self.backend.setResolution(resolution);
     }
 
-    pub fn getResolution(self: Self) Resolution {
+    pub fn getResolution(self: *const Self) Resolution {
         return self.state.getResolution();
     }
 
@@ -103,7 +103,7 @@ pub const Ornament = struct {
         self.state.setRayCastEpsilon(ray_cast_epsilon);
     }
 
-    pub fn getRayCastEpsilon(self: Self) f32 {
+    pub fn getRayCastEpsilon(self: *const Self) f32 {
         return self.state.getRayCastEpsilon();
     }
 
@@ -397,8 +397,7 @@ pub const Ornament = struct {
     }
 
     pub fn createTexture(self: *Self, data: []u8, width: u32, height: u32, num_components: u32, bytes_per_component: u32, is_hdr: bool, gamma: f32) !*Texture {
-        self.state.setTexturesCount(self.textures.items.len + 1);
-        return self.addElement(try Texture.init(
+        var txt = self.addElement(try Texture.init(
             self.allocator,
             data,
             width,
@@ -408,10 +407,13 @@ pub const Ornament = struct {
             is_hdr,
             gamma,
         ), &self.textures);
+        self.state.setTexturesCount(@as(u32, @truncate(self.textures.items.len)));
+        return txt;
     }
 
     pub fn releaseTexture(self: *Self, texture: *const Texture) void {
         self.releaseElement(texture, self.textures);
+        self.state.setTexturesCount(@as(u32, @truncate(self.textures.items.len)));
     }
 
     fn addElement(self: *Self, to_add: anytype, list: *std.ArrayList(*@TypeOf(to_add))) std.mem.Allocator.Error!*@TypeOf(to_add) {
@@ -469,7 +471,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getFlipY(self: Self) bool {
+    pub fn getFlipY(self: *const Self) bool {
         return self.flip_y;
     }
 
@@ -478,7 +480,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getGamma(self: Self) f32 {
+    pub fn getGamma(self: *const Self) f32 {
         return 1.0 / self.inverted_gamma;
     }
 
@@ -487,7 +489,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getDepth(self: Self) u32 {
+    pub fn getDepth(self: *const Self) u32 {
         return self.depth;
     }
 
@@ -496,7 +498,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getIterations(self: Self) u32 {
+    pub fn getIterations(self: *const Self) u32 {
         return self.iterations;
     }
 
@@ -505,7 +507,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getResolution(self: Self) Resolution {
+    pub fn getResolution(self: *const Self) Resolution {
         return self.resolution;
     }
 
@@ -514,7 +516,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getRayCastEpsilon(self: Self) f32 {
+    pub fn getRayCastEpsilon(self: *const Self) f32 {
         return self.ray_cast_epsilon;
     }
 
@@ -523,7 +525,7 @@ pub const State = struct {
         self.makeDirty();
     }
 
-    pub fn getTexturesCount(self: Self) u32 {
+    pub fn getTexturesCount(self: *const Self) u32 {
         return self.textures_count;
     }
 };
