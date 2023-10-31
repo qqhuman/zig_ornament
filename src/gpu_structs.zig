@@ -17,9 +17,16 @@ pub const Node = extern struct {
     left_aabb_max_or_v1: [3]f32,
     right_or_material_index: u32,
     right_aabb_min_or_v2: [3]f32,
-    node_type: u32, // 0 internal node, 1 sphere, 2 mesh, 3 triangle
+    node_type: NodeType,
     right_aabb_max_or_v3: [3]f32,
     transform_id: u32,
+};
+
+pub const NodeType = enum(u32) {
+    InternalNode = 0,
+    Sphere = 1,
+    Mesh = 2,
+    Triangle = 3,
 };
 
 pub const Material = extern struct {
@@ -28,7 +35,7 @@ pub const Material = extern struct {
     albedo_texture_index: u32,
     fuzz: f32,
     ior: f32,
-    materia_type: u32,
+    materia_type: MaterialType,
     _padding: u32 = undefined,
 
     pub fn from(material: *const ornament.Material) Self {
@@ -49,6 +56,8 @@ pub const Material = extern struct {
         };
     }
 };
+
+pub const MaterialType = enum(u32) {};
 
 pub const ConstantState = extern struct {
     const Self = @This();
@@ -116,3 +125,28 @@ pub const Camera = extern struct {
         };
     }
 };
+
+pub fn ArrayList(comptime T: type) type {
+    const VTable = struct {
+        flush_to_device: *const fn (self: *anyopaque) void,
+        len: *const fn (self: *const anyopaque) usize,
+        get: *const fn (self: *anyopaque, i: usize) T,
+        set: *const fn (self: *anyopaque, i: usize, item: T) void,
+        get_slice_mut: *const fn (self: *anyopaque, start: usize, end: usize) []T,
+        get_slice: *const fn (self: *const anyopaque, start: usize, end: usize) []const T,
+        get_slice_from: *const fn (self: *const anyopaque, start: usize) []const T,
+        ensureUnusedCapacity: *const fn (self: *anyopaque, additional_count: usize) std.mem.Allocator.Error!void,
+        ensureTotalCapacity: *const fn (self: *anyopaque, new_capacity: usize) std.mem.Allocator.Error!void,
+        append: *const fn (self: *anyopaque, item: T) std.mem.Allocator.Error!void,
+        addManyAsSlice: *const fn (self: *anyopaque, n: usize) std.mem.Allocator.Error![]T,
+        appendSlice: *const fn (self: *anyopaque, items: []const T) std.mem.Allocator.Error!void,
+        appendNTimes: *const fn (self: *anyopaque, value: T, n: usize) std.mem.Allocator.Error!void,
+        shrinkRetainingCapacity: *const fn (self: *anyopaque, new_len: usize) void,
+        clearRetainingCapacity: *const fn (self: *anyopaque) void,
+    };
+
+    return struct {
+        ptr: *anyopaque,
+        vtable: *const VTable,
+    };
+}

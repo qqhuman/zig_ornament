@@ -564,6 +564,25 @@ fn loadMesh(allocator: std.mem.Allocator, modelname: [:0]const u8, ornament_ctx:
         v.* = zmath.mul(v.*, normalize_matrix);
     }
 
+    var bvhblas = ornament.wgpu_backend.BvhBlas.init(
+        allocator,
+        ornament_ctx.backend.device_state.device,
+        ornament_ctx.backend.device_state.queue,
+    );
+    var m = try bvhblas.append(
+        vertices.items,
+        indices.items,
+        normals.items,
+        indices.items,
+        uvs.items,
+        indices.items,
+        transform,
+        material,
+    );
+    _ = m;
+    //bvhblas.remove(m);
+    bvhblas.deinit();
+
     return ornament_ctx.createMesh(
         vertices.items,
         indices.items,

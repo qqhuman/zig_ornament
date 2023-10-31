@@ -11,7 +11,7 @@ pub const Texture = struct {
     bytes_per_row: u32,
     is_hdr: bool,
     gamma: f32,
-    texture_id: ?u32 = null,
+    texture_id: u32,
 
     pub fn init(
         allocator: std.mem.Allocator,

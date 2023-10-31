@@ -1,16 +1,16 @@
-pub const wgpu_backend = @import("wgpu_backend/backend.zig");
-pub const hip = @import("hip_backend/hip.zig");
-pub const Resolution = util.Resolution;
-
 const std = @import("std");
 const zmath = @import("zmath");
 const util = @import("util.zig");
 const math = @import("math.zig");
-const materials = @import("materials/material.zig");
+const materials = @import("materials/materials.zig");
+const geometry = @import("geometry/geometry.zig");
+
+pub const wgpu_backend = @import("wgpu_backend/backend.zig");
+pub const hip = @import("hip_backend/hip.zig");
+pub const Resolution = util.Resolution;
 pub const Material = materials.Material;
 pub const Texture = @import("materials/texture.zig").Texture;
 pub const Color = @import("materials/color.zig").Color;
-const geometry = @import("geometry/geometry.zig");
 pub const Scene = geometry.Scene;
 pub const Camera = geometry.Camera;
 pub const Aabb = geometry.Aabb;

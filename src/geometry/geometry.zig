@@ -7,14 +7,14 @@ pub const MeshInstance = @import("mesh_instance.zig").MeshInstance;
 const aabb = @import("aabb.zig");
 pub const Aabb = aabb.Aabb;
 pub const transformAabb = aabb.transformAabb;
+const Shape = @import("../util.zig").Shape;
 
 pub const Scene = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     camera: Camera,
-    spheres: std.ArrayList(*Sphere),
-    meshes: std.ArrayList(*Mesh),
-    mesh_instances: std.ArrayList(*MeshInstance),
+    shapes: std.ArrayList(Shape),
+    dirty: bool = true,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         return .{
@@ -28,27 +28,48 @@ pub const Scene = struct {
                 0.0,
                 10.0,
             ),
-            .spheres = std.ArrayList(*Sphere).init(allocator),
-            .meshes = std.ArrayList(*Mesh).init(allocator),
-            .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
+            .shapes = std.ArrayList(Shape).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.spheres.deinit();
-        self.meshes.deinit();
-        self.mesh_instances.deinit();
+        self.shapes.deinit();
     }
 
-    pub fn addSphere(self: *Self, sphere: *Sphere) std.mem.Allocator.Error!void {
-        try self.spheres.append(sphere);
+    pub fn appendSphere(self: *Self, sphere: *Sphere) !void {
+        try self.shapes.append(.{ .sphere = sphere });
+        self.dirty = true;
     }
 
-    pub fn addMesh(self: *Self, mesh: *Mesh) std.mem.Allocator.Error!void {
-        try self.meshes.append(mesh);
+    pub fn removeSphere(self: *Self, sphere: *Sphere) void {
+        self.removeShape(.{ .sphere = sphere });
     }
 
-    pub fn addMeshInstance(self: *Self, mesh_instance: *MeshInstance) std.mem.Allocator.Error!void {
-        try self.mesh_instances.append(mesh_instance);
+    pub fn appendMesh(self: *Self, mesh: *Mesh) !void {
+        try self.shapes.append(.{ .mesh = mesh });
+        self.dirty = true;
+    }
+
+    pub fn removeMesh(self: *Self, mesh: *Mesh) void {
+        self.removeShape(.{ .mesh = mesh });
+    }
+
+    pub fn appendMeshInstance(self: *Self, mesh_instance: *MeshInstance) !void {
+        try self.shapes.append(.{ .mesh_instance = mesh_instance });
+        self.dirty = true;
+    }
+
+    pub fn removeMeshInstance(self: *Self, mesh_instance: *MeshInstance) void {
+        self.removeShape(.{ .mesh_instance = mesh_instance });
+    }
+
+    fn removeShape(self: *Self, shape: Shape) void {
+        for (self.shapes.items, 0..) |s, i| {
+            if (s == shape) {
+                self.shapes.swapRemove(i);
+                self.dirty = true;
+                break;
+            }
+        }
     }
 };
