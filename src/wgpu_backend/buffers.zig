@@ -17,15 +17,15 @@ pub const Target = struct {
 
     pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, resolution: util.Resolution) !Self {
         const pixels_count = resolution.width * resolution.height;
-        const buffer = Storage(gpu_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
-        const accumulation_buffer = Storage(gpu_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
+        const buffer = Storage(gpu_structs.Vector4).init(device, .{ .element_count = pixels_count }, true, false);
+        const accumulation_buffer = Storage(gpu_structs.Vector4).init(device, .{ .element_count = pixels_count }, true, false);
 
         var rng_seed = try allocator.alloc(u32, pixels_count);
         defer allocator.free(rng_seed);
         for (rng_seed, 0..) |*value, index| {
             value.* = @truncate(index);
         }
-        const rng_state_buffer = Storage(u32).init(device, false, .{ .data = rng_seed });
+        const rng_state_buffer = Storage(u32).init(device, .{ .data = rng_seed }, false, false);
 
         var workgroups = pixels_count / WORKGROUP_SIZE;
         if (pixels_count % WORKGROUP_SIZE > 0) {
@@ -67,12 +67,14 @@ pub fn Storage(comptime T: type) type {
         const Self = @This();
         handle: webgpu.Buffer,
         padded_size_in_bytes: u64,
+        len: u64,
 
-        pub fn init(device: webgpu.Device, copy_src: bool, init_data: union(enum) { element_count: u64, data: []const T }) Self {
-            var usage = webgpu.BufferUsage{ .storage = true };
-            if (copy_src) {
-                usage.copy_src = true;
-            }
+        pub fn init(device: webgpu.Device, init_data: union(enum) { element_count: u64, data: []const T }, copy_src: bool, copy_dst: bool) Self {
+            var usage = webgpu.BufferUsage{
+                .storage = true,
+                .copy_src = copy_src,
+                .copy_dst = copy_dst,
+            };
 
             const label = "[ornament] []" ++ @typeName(T) ++ " storage";
             const count = switch (init_data) {
@@ -104,7 +106,11 @@ pub fn Storage(comptime T: type) type {
                 },
             };
 
-            return .{ .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
+            return .{
+                .handle = handle,
+                .padded_size_in_bytes = padded_size_in_bytes,
+                .len = count,
+            };
         }
 
         pub fn deinit(self: *Self) void {
@@ -285,3 +291,147 @@ pub const Textures = struct {
         unreachable;
     }
 };
+
+pub fn ArrayList(comptime T: type) type {
+    return struct {
+        const Self = @This();
+        dirty: bool = true,
+        allocator: std.mem.Allocator,
+        device: webgpu.Device,
+        queue: webgpu.Queue,
+        host_storage: std.ArrayList(T),
+        device_storage: Storage(T),
+
+        pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, queue: webgpu.Queue) *Self {
+            var self = allocator.create(ArrayList(T));
+            self.* = .{
+                .allocator = allocator,
+                .device = device,
+                .queue = queue,
+                .host_storage = std.ArrayList(T).init(allocator),
+                .device_storage = Storage(T).init(device, .{ .element_count = 0 }, true, true),
+            };
+            return self;
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.host_storage.deinit();
+            self.device_storage.deinit();
+            self.allocator.destroy(self);
+        }
+
+        pub fn to_general_interface(self: *Self) gpu_structs.ArrayList(T) {
+            return .{
+                .ptr = self,
+                .vtable = &comptime .{
+                    .flush_to_device = Self.flush_to_device,
+                    .len = Self.len,
+                    .get = Self.get,
+                    .set = Self.set,
+                    .get_slice_mut = Self.get_slice_mut,
+                    .get_slice = Self.get_slice,
+                    .get_slice_from = Self.get_slice_from,
+                    .ensureUnusedCapacity = Self.ensureUnusedCapacity,
+                    .ensureTotalCapacity = Self.ensureTotalCapacity,
+                    .append = Self.append,
+                    .addManyAsSlice = Self.addManyAsSlice,
+                    .appendSlice = Self.appendSlice,
+                    .appendNTimes = Self.appendNTimes,
+                    .shrinkRetainingCapacity = Self.shrinkRetainingCapacity,
+                    .clearRetainingCapacity = Self.clearRetainingCapacity,
+                },
+            };
+        }
+
+        pub fn flush_to_device(ctx: *anyopaque) void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            if (self.host_storage.items.len > self.device_storage.len) {
+                self.device_storage.deinit();
+                self.device_storage = Storage(T).init(self.device, .{ .data = self.host_storage.items }, true, true);
+            } else {
+                self.queue.writeBuffer(self.device_storage.handle, 0, T, self.host_storage.items);
+            }
+            self.dirty = false;
+        }
+
+        pub fn len(ctx: *const anyopaque) usize {
+            const self: *Self = @ptrCast(@alignCast(ctx));
+            return self.host_storage.items.len;
+        }
+
+        pub fn get(ctx: *anyopaque, i: usize) T {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            return self.host_storage.items[i];
+        }
+
+        pub fn set(ctx: *anyopaque, i: usize, item: T) void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            self.host_storage.items[i] = item;
+            self.dirty = true;
+        }
+
+        pub fn get_slice_mut(ctx: *anyopaque, start: usize, end: usize) []T {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            var slice = self.host_storage.items[start..end];
+            self.dirty = true;
+            return slice;
+        }
+
+        pub fn get_slice(ctx: *const anyopaque, start: usize, end: usize) []const T {
+            const self: *Self = @ptrCast(@alignCast(ctx));
+            return self.host_storage.items[start..end];
+        }
+
+        pub fn get_slice_from(ctx: *const anyopaque, start: usize) []const T {
+            const self: *Self = @ptrCast(@alignCast(ctx));
+            return self.host_storage.items[start..];
+        }
+
+        pub fn ensureUnusedCapacity(ctx: *anyopaque, additional_count: usize) !void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            return self.host_storage.ensureUnusedCapacity(additional_count);
+        }
+
+        pub fn ensureTotalCapacity(ctx: *anyopaque, new_capacity: usize) !void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            return self.host_storage.ensureTotalCapacity(new_capacity);
+        }
+
+        pub fn append(ctx: *anyopaque, item: T) !void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            try self.host_storage.append(item);
+            self.dirty = true;
+        }
+
+        pub fn addManyAsSlice(ctx: *anyopaque, n: usize) ![]T {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            var slice = try self.host_storage.addManyAsSlice(n);
+            self.dirty = true;
+            return slice;
+        }
+
+        pub fn appendSlice(ctx: *anyopaque, items: []const T) !void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            try self.host_storage.appendSlice(items);
+            self.dirty = true;
+        }
+
+        pub fn appendNTimes(ctx: *anyopaque, value: T, n: usize) !void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            try self.host_storage.appendNTimes(value, n);
+            self.dirty = true;
+        }
+
+        pub fn shrinkRetainingCapacity(ctx: *anyopaque, new_len: usize) void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            self.host_storage.shrinkRetainingCapacity(new_len);
+            self.dirty = true;
+        }
+
+        pub fn clearRetainingCapacity(ctx: *anyopaque) void {
+            var self: *Self = @ptrCast(@alignCast(ctx));
+            self.host_storage.clearRetainingCapacity();
+            self.dirty = true;
+        }
+    };
+}

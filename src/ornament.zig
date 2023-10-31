@@ -1,16 +1,17 @@
-pub const wgpu_backend = @import("wgpu_backend/backend.zig");
-pub const hip = @import("hip_backend/hip.zig");
-pub const Resolution = util.Resolution;
-
 const std = @import("std");
 const zmath = @import("zmath");
 const util = @import("util.zig");
 const math = @import("math.zig");
-const materials = @import("materials/material.zig");
+const materials = @import("materials/materials.zig");
+const geometry = @import("geometry/geometry.zig");
+const MaterialsController = @import("materials_controller.zig").MaterialsController;
+
+pub const wgpu_backend = @import("wgpu_backend/backend.zig");
+pub const hip = @import("hip_backend/hip.zig");
+pub const Resolution = util.Resolution;
 pub const Material = materials.Material;
 pub const Texture = @import("materials/texture.zig").Texture;
 pub const Color = @import("materials/color.zig").Color;
-const geometry = @import("geometry/geometry.zig");
 pub const Scene = geometry.Scene;
 pub const Camera = geometry.Camera;
 pub const Aabb = geometry.Aabb;
@@ -23,11 +24,7 @@ pub const Ornament = struct {
     allocator: std.mem.Allocator,
     state: State,
     scene: Scene,
-    materials: std.ArrayList(*Material),
-    spheres: std.ArrayList(*Sphere),
-    meshes: std.ArrayList(*Mesh),
-    mesh_instances: std.ArrayList(*MeshInstance),
-    textures: std.ArrayList(*Texture),
+    materials_controller: MaterialsController,
     backend: wgpu_backend.Backend,
 
     pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?wgpu_backend.webgpu.SurfaceDescriptor) !Self {
@@ -37,25 +34,15 @@ pub const Ornament = struct {
             .allocator = allocator,
             .state = state,
             .scene = scene,
-            .materials = std.ArrayList(*Material).init(allocator),
-            .spheres = std.ArrayList(*Sphere).init(allocator),
-            .meshes = std.ArrayList(*Mesh).init(allocator),
-            .mesh_instances = std.ArrayList(*MeshInstance).init(allocator),
-            .textures = std.ArrayList(*Texture).init(allocator),
+            .materials_controller = MaterialsController.init(allocator),
             .backend = try wgpu_backend.Backend.init(allocator, surface_descriptor, &scene, &state),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.backend.deinit();
+        self.materials_controller.deinit();
         self.scene.deinit();
-        self.destroyElements(&self.spheres);
-        for (self.meshes.items) |m| m.deinit();
-        self.destroyElements(&self.meshes);
-        self.destroyElements(&self.mesh_instances);
-        self.destroyElements(&self.materials);
-        for (self.textures.items) |t| t.deinit();
-        self.destroyElements(&self.textures);
     }
 
     pub fn setFlipY(self: *Self, flip_y: bool) void {
@@ -112,63 +99,23 @@ pub const Ornament = struct {
     }
 
     pub fn lambertian(self: *Self, albedo: Color) std.mem.Allocator.Error!*Material {
-        var material = try self.allocator.create(Material);
-        material.* = Material{
-            .albedo = albedo,
-            .materia_type = 0,
-
-            .fuzz = undefined,
-            .ior = undefined,
-            .material_index = null,
-        };
-        try self.materials.append(material);
-        return material;
+        return self.materials_controller.lambertian(albedo);
     }
 
     pub fn metal(self: *Self, albedo: Color, fuzz: f32) std.mem.Allocator.Error!*Material {
-        var material = try self.allocator.create(Material);
-        material.* = Material{
-            .albedo = albedo,
-            .fuzz = fuzz,
-            .materia_type = 1,
-
-            .ior = undefined,
-            .material_index = null,
-        };
-        try self.materials.append(material);
-        return material;
+        return self.materials_controller.metal(albedo, fuzz);
     }
 
     pub fn dielectric(self: *Self, ior: f32) std.mem.Allocator.Error!*Material {
-        var material = try self.allocator.create(Material);
-        material.* = Material{
-            .ior = ior,
-            .materia_type = 2,
-
-            .albedo = undefined,
-            .fuzz = undefined,
-            .material_index = null,
-        };
-        try self.materials.append(material);
-        return material;
+        return self.materials_controller.dielectric(ior);
     }
 
     pub fn diffuseLight(self: *Self, albedo: Color) std.mem.Allocator.Error!*Material {
-        return self.addElement(
-            Material{
-                .albedo = albedo,
-                .materia_type = 3,
-
-                .fuzz = undefined,
-                .ior = undefined,
-                .material_index = null,
-            },
-            &self.materials,
-        );
+        return self.materials_controller.diffuseLight(albedo);
     }
 
-    pub fn releaseMaterial(self: *Self, material: *const Material) void {
-        self.releaseElement(material, &self.materials);
+    pub fn releaseMaterial(self: *Self, material: *Material) void {
+        self.materials_controller.release(material);
     }
 
     pub fn createSphere(self: *Self, center: zmath.Vec, radius: f32, material: *Material) std.mem.Allocator.Error!*Sphere {
@@ -387,44 +334,14 @@ pub const Ornament = struct {
     }
 
     pub fn createTexture(self: *Self, data: []u8, width: u32, height: u32, num_components: u32, bytes_per_component: u32, is_hdr: bool, gamma: f32) !*Texture {
-        var txt = self.addElement(try Texture.init(
-            self.allocator,
-            data,
-            width,
-            height,
-            num_components,
-            bytes_per_component,
-            is_hdr,
-            gamma,
-        ), &self.textures);
+        var texture = try self.materials_controller.addTexture(data, width, height, num_components, bytes_per_component, is_hdr, gamma);
         self.state.setTexturesCount(@as(u32, @truncate(self.textures.items.len)));
-        return txt;
+        return texture;
     }
 
     pub fn releaseTexture(self: *Self, texture: *const Texture) void {
-        self.releaseElement(texture, self.textures);
+        self.materials_controller.releaseTexture(texture, self.textures);
         self.state.setTexturesCount(@as(u32, @truncate(self.textures.items.len)));
-    }
-
-    fn addElement(self: *Self, to_add: anytype, list: *std.ArrayList(*@TypeOf(to_add))) std.mem.Allocator.Error!*@TypeOf(to_add) {
-        var el = try self.allocator.create(@TypeOf(to_add));
-        el.* = to_add;
-        try list.append(el);
-        return el;
-    }
-
-    fn releaseElement(self: *Self, to_remove: anytype, list: *std.ArrayList(@TypeOf(to_remove))) void {
-        for (list.items, 0..) |el, index| {
-            if (el == to_remove) {
-                _ = list.swapRemove(index);
-                self.allocator.destroy(to_remove);
-            }
-        }
-    }
-
-    fn destroyElements(self: *Self, list: anytype) void {
-        for (list.items) |el| self.allocator.destroy(el);
-        list.deinit();
     }
 };
 

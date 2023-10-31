@@ -1,28 +1,23 @@
 const std = @import("std");
 const zmath = @import("zmath");
 const Material = @import("../materials/material.zig").Material;
+const Range = @import("../util.zig").Range;
 const Aabb = @import("aabb.zig").Aabb;
 
 pub const Mesh = struct {
-    pub const Self = @This();
-    vertices: std.ArrayList(zmath.Vec),
-    vertex_indices: std.ArrayList(u32),
-    normals: std.ArrayList(zmath.Vec),
-    normal_indices: std.ArrayList(u32),
-    uvs: std.ArrayList([2]f32),
-    uv_indices: std.ArrayList(u32),
+    const Self = @This();
+    bvh_tlas_node_index: ?usize = null,
+    ll_owner_node: *std.DoublyLinkedList(Self).Node,
+    bvh_blas_nodes_range: Range,
+    indices_range: Range,
+    normals_range: Range,
+    uvs_range: Range,
+    material: *const Material,
     transform: zmath.Mat,
-    material: *Material,
-    bvh_id: ?u32,
     aabb: Aabb,
     not_transformed_aabb: Aabb,
 
-    pub fn deinit(self: *Self) void {
-        self.vertices.deinit();
-        self.vertex_indices.deinit();
-        self.normals.deinit();
-        self.normal_indices.deinit();
-        self.uvs.deinit();
-        self.uv_indices.deinit();
+    pub inline fn bvh_blas_mesh_top_index(self: *const Self) usize {
+        return self.bvh_blas_nodes_range.end - 1;
     }
 };

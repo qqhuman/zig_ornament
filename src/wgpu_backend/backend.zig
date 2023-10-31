@@ -2,12 +2,12 @@ pub const wgpu = @import("wgpu.zig");
 pub const webgpu = @import("webgpu.zig");
 pub const buffers = @import("buffers.zig");
 pub const DeviceState = @import("device_state.zig").DeviceState;
-
+const BvhBlas = @import("../bvh_blas.zig").BvhBlas;
+const BvhTlas = @import("../bvh_tlas.zig").BvhTlas;
 const std = @import("std");
 const gpu_structs = @import("../gpu_structs.zig");
 const ornament = @import("../ornament.zig");
 const util = @import("../util.zig");
-const Bvh = @import("../bvh.zig").Bvh;
 
 pub const Backend = struct {
     pub const Self = @This();
@@ -20,11 +20,22 @@ pub const Backend = struct {
     pipeline: ?Pipeline,
 
     target_buffer: ?buffers.Target,
-    storage_buffers: ?StorageBuffers,
 
     dynamic_state_buffer: buffers.Uniform(gpu_structs.DynamicState),
     constant_state_buffer: buffers.Uniform(gpu_structs.ConstantState),
     camera_buffer: buffers.Uniform(gpu_structs.Camera),
+
+    blas_nodes: *buffers.ArrayList(gpu_structs.Node),
+    normals: *buffers.ArrayList(gpu_structs.Normal),
+    normal_indices: *buffers.ArrayList(u32),
+    uvs: *buffers.ArrayList(gpu_structs.Uv),
+    uv_indices: *buffers.ArrayList(u32),
+
+    tlas_nodes: *buffers.ArrayList(gpu_structs.Node),
+    transforms: *buffers.ArrayList(gpu_structs.Transform),
+
+    bvh_blas: BvhBlas,
+    bvh_tlas: BvhTlas,
 
     pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?webgpu.SurfaceDescriptor, scene: *const ornament.Scene, state: *const ornament.State) !Self {
         const device_state = try DeviceState.init(allocator, surface_descriptor);
@@ -34,11 +45,19 @@ pub const Backend = struct {
         const constant_state_buffer = buffers.Uniform(gpu_structs.ConstantState).init(device_state.device, false, gpu_structs.ConstantState.from(state));
         const camera_buffer = buffers.Uniform(gpu_structs.Camera).init(device_state.device, false, gpu_structs.Camera.from(&scene.camera));
 
+        const tlas_nodes = buffers.ArrayList(gpu_structs.Node).init(allocator, device_state.device, device_state.queue);
+        const transforms = buffers.ArrayList(gpu_structs.Transform).init(allocator, device_state.device, device_state.queue);
+
+        const blas_nodes = buffers.ArrayList(gpu_structs.Node).init(allocator, device_state.device, device_state.queue);
+        const normals = buffers.ArrayList(gpu_structs.Normal).init(allocator, device_state.device, device_state.queue);
+        const normal_indices = buffers.ArrayList(gpu_structs.u32).init(allocator, device_state.device, device_state.queue);
+        const uvs = buffers.ArrayList(gpu_structs.Uv).init(allocator, device_state.device, device_state.queue);
+        const uv_indices = buffers.ArrayList(u32).init(allocator, device_state.device, device_state.queue);
+
         return .{
             .allocator = allocator,
             .dynamic_state = dynamic_state,
             .resolution = state.getResolution(),
-
             .device_state = device_state,
             .shader_module = createShaderModule(device_state.device),
             .pipeline = null,
@@ -47,6 +66,18 @@ pub const Backend = struct {
             .dynamic_state_buffer = dynamic_state_buffer,
             .constant_state_buffer = constant_state_buffer,
             .camera_buffer = camera_buffer,
+
+            .tlas_nodes = tlas_nodes,
+            .transforms = transforms,
+
+            .blas_nodes = blas_nodes,
+            .normals = normals,
+            .normal_indices = normal_indices,
+            .uvs = uvs,
+            .uv_indices = uv_indices,
+
+            .bvh_tlas = BvhTlas.init(allocator),
+            .bvh_blas = BvhBlas.init(allocator),
         };
     }
 
@@ -54,6 +85,18 @@ pub const Backend = struct {
         if (self.pipeline) |*p| p.deinit();
         if (self.storage_buffers) |*sb| sb.deinit();
         if (self.target_buffer) |*tb| tb.deinit();
+        self.bvh_tlas.deinit();
+        self.bvh_blas.deinit();
+
+        self.tlas_nodes.deinit();
+        self.transforms.deinit();
+
+        self.blas_nodes.deinit();
+        self.normals.deinit();
+        self.normal_indices.deinit();
+        self.uvs.deinit();
+        self.uv_indices.deinit();
+
         self.dynamic_state_buffer.deinit();
         self.constant_state_buffer.deinit();
         self.camera_buffer.deinit();
@@ -82,19 +125,6 @@ pub const Backend = struct {
             .next_in_chain = @ptrCast(&wgsl_descriptor),
             .label = "[ornament] path tracer shader module",
         });
-    }
-
-    fn getOrCreateStorageBuffers(self: *Self, ornament_ctx: *const ornament.Ornament) !*StorageBuffers {
-        if (self.storage_buffers == null) {
-            self.storage_buffers = try StorageBuffers.init(
-                self.allocator,
-                self.device_state.device,
-                self.device_state.queue,
-                ornament_ctx,
-            );
-            std.log.debug("[ornament] storage buffers were created", .{});
-        }
-        return &self.storage_buffers.?;
     }
 
     fn getWorkGroups(self: *Self) !u32 {
@@ -210,84 +240,6 @@ pub const Backend = struct {
             self.update(ornament_ctx);
             try self.runPipeline(pipeline.path_tracing_and_post_processing, pipeline.bind_groups, "path tracing and post processing");
         }
-    }
-};
-
-pub const StorageBuffers = struct {
-    pub const Self = @This();
-    bvh: Bvh,
-    textures: buffers.Textures,
-    materials_buffer: buffers.Storage(gpu_structs.Material),
-    normals_buffer: buffers.Storage(gpu_structs.Normal),
-    normal_indices_buffer: buffers.Storage(u32),
-    uvs_buffer: buffers.Storage(gpu_structs.Uv),
-    uv_indices_buffer: buffers.Storage(u32),
-    transforms_buffer: buffers.Storage(gpu_structs.Transform),
-    tlas_nodes_buffer: buffers.Storage(gpu_structs.Node),
-    blas_nodes_buffer: buffers.Storage(gpu_structs.Node),
-
-    pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, queue: webgpu.Queue, ornament_ctx: *const ornament.Ornament) !Self {
-        const bvh = try Bvh.init(allocator, ornament_ctx);
-        const textures = try buffers.Textures.init(allocator, bvh.textures.items, device, queue);
-
-        const materials_buffer = buffers.Storage(gpu_structs.Material).init(device, false, .{ .data = bvh.materials.items });
-        const tlas_nodes_buffer = buffers.Storage(gpu_structs.Node).init(device, false, .{ .data = bvh.tlas_nodes.items });
-        const blas_nodes_buffer = buffers.Storage(gpu_structs.Node).init(device, false, .{ .data = bvh.blas_nodes.items });
-        const normals_buffer = buffers.Storage(gpu_structs.Normal).init(device, false, .{ .data = bvh.normals.items });
-        const normal_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.normal_indices.items });
-        const uvs_buffer = buffers.Storage(gpu_structs.Uv).init(device, false, .{ .data = bvh.uvs.items });
-        const uv_indices_buffer = buffers.Storage(u32).init(device, false, .{ .data = bvh.uv_indices.items });
-        const transforms_buffer = buffers.Storage(gpu_structs.Transform).init(device, false, .{ .data = bvh.transforms.items });
-
-        log("materials_buffer", bvh.materials.items.len, materials_buffer.padded_size_in_bytes);
-        log("tlas_nodes_buffer", bvh.tlas_nodes.items.len, tlas_nodes_buffer.padded_size_in_bytes);
-        log("blas_nodes_buffer", bvh.blas_nodes.items.len, blas_nodes_buffer.padded_size_in_bytes);
-        log("normals_buffer", bvh.normals.items.len, normals_buffer.padded_size_in_bytes);
-        log("normal_indices_buffer", bvh.normal_indices.items.len, normal_indices_buffer.padded_size_in_bytes);
-        log("uvs_buffer", bvh.uvs.items.len, uvs_buffer.padded_size_in_bytes);
-        log("uv_indices_buffer", bvh.uv_indices.items.len, uv_indices_buffer.padded_size_in_bytes);
-        log("transforms_buffer", bvh.transforms.items.len, transforms_buffer.padded_size_in_bytes);
-        const bytes = materials_buffer.padded_size_in_bytes +
-            tlas_nodes_buffer.padded_size_in_bytes +
-            blas_nodes_buffer.padded_size_in_bytes +
-            normals_buffer.padded_size_in_bytes +
-            normal_indices_buffer.padded_size_in_bytes +
-            uvs_buffer.padded_size_in_bytes +
-            uv_indices_buffer.padded_size_in_bytes +
-            transforms_buffer.padded_size_in_bytes;
-        std.log.debug("[ornament], all buff bytes = {d}, mb = {d}", .{ bytes, bytes / (1024 * 1024) });
-
-        return .{
-            .bvh = bvh,
-            .textures = textures,
-
-            .materials_buffer = materials_buffer,
-            .normals_buffer = normals_buffer,
-            .normal_indices_buffer = normal_indices_buffer,
-            .uvs_buffer = uvs_buffer,
-            .uv_indices_buffer = uv_indices_buffer,
-            .transforms_buffer = transforms_buffer,
-            .tlas_nodes_buffer = tlas_nodes_buffer,
-            .blas_nodes_buffer = blas_nodes_buffer,
-        };
-    }
-
-    fn log(comptime buf_name: []const u8, elem_count: usize, buff_size: u64) void {
-        std.log.debug("[ornament] {s}, elements = {d}, bytes = {d}", .{ buf_name, elem_count, buff_size });
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.bvh.deinit();
-        self.textures.deinit();
-
-        self.materials_buffer.deinit();
-        self.normals_buffer.deinit();
-        self.normal_indices_buffer.deinit();
-        self.uvs_buffer.deinit();
-        self.uv_indices_buffer.deinit();
-        self.transforms_buffer.deinit();
-        self.tlas_nodes_buffer.deinit();
-        self.blas_nodes_buffer.deinit();
     }
 };
 

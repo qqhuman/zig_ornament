@@ -11,7 +11,7 @@ pub const Texture = struct {
     bytes_per_row: u32,
     is_hdr: bool,
     gamma: f32,
-    texture_id: ?u32 = null,
+    texture_id: u32,
 
     pub fn init(
         allocator: std.mem.Allocator,
@@ -22,6 +22,7 @@ pub const Texture = struct {
         bytes_per_component: u32,
         is_hdr: bool,
         gamma: f32,
+        texture_id: u32,
     ) !Self {
         const bytes_per_row = width * num_components * bytes_per_component;
         var self = Self{
@@ -34,6 +35,7 @@ pub const Texture = struct {
             .bytes_per_row = bytes_per_row,
             .is_hdr = is_hdr,
             .gamma = gamma,
+            .texture_id = texture_id,
         };
         try self.data.appendSlice(data);
         return self;
