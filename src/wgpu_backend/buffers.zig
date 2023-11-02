@@ -1,16 +1,15 @@
 const std = @import("std");
 const ornament = @import("../ornament.zig");
 const webgpu = @import("webgpu.zig");
-const WgpuContext = @import("wgpu_context.zig").WgpuContext;
 const util = @import("../util.zig");
-const wgsl_structs = @import("wgsl_structs.zig");
+const gpu_structs = @import("../gpu_structs.zig");
 
 pub const WORKGROUP_SIZE: u32 = 256;
 
 pub const Target = struct {
     const Self = @This();
-    buffer: Storage(wgsl_structs.Vector4),
-    accumulation_buffer: Storage(wgsl_structs.Vector4),
+    buffer: Storage(gpu_structs.Vector4),
+    accumulation_buffer: Storage(gpu_structs.Vector4),
     rng_state_buffer: Storage(u32),
     pixels_count: u32,
     resolution: util.Resolution,
@@ -18,8 +17,8 @@ pub const Target = struct {
 
     pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, resolution: util.Resolution) !Self {
         const pixels_count = resolution.width * resolution.height;
-        const buffer = Storage(wgsl_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
-        const accumulation_buffer = Storage(wgsl_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
+        const buffer = Storage(gpu_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
+        const accumulation_buffer = Storage(gpu_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
 
         var rng_seed = try allocator.alloc(u32, pixels_count);
         defer allocator.free(rng_seed);
@@ -48,11 +47,11 @@ pub const Target = struct {
         self.rng_state_buffer.deinit();
     }
 
-    pub fn layout(self: Self, binding_id: u32, visibility: webgpu.ShaderStage, read_only: bool) webgpu.BindGroupLayoutEntry {
+    pub fn layout(self: *const Self, binding_id: u32, visibility: webgpu.ShaderStage, read_only: bool) webgpu.BindGroupLayoutEntry {
         return self.buffer.layout(binding_id, visibility, read_only);
     }
 
-    pub fn binding(self: Self, binding_id: u32) webgpu.BindGroupEntry {
+    pub fn binding(self: *const Self, binding_id: u32) webgpu.BindGroupEntry {
         return self.buffer.binding(binding_id);
     }
 };
@@ -112,7 +111,7 @@ pub fn Storage(comptime T: type) type {
             self.handle.release();
         }
 
-        pub fn layout(self: Self, binding_id: u32, visibility: webgpu.ShaderStage, read_only: bool) webgpu.BindGroupLayoutEntry {
+        pub fn layout(self: *const Self, binding_id: u32, visibility: webgpu.ShaderStage, read_only: bool) webgpu.BindGroupLayoutEntry {
             _ = self;
             return .{
                 .binding = binding_id,
@@ -121,7 +120,7 @@ pub fn Storage(comptime T: type) type {
             };
         }
 
-        pub fn binding(self: Self, binding_id: u32) webgpu.BindGroupEntry {
+        pub fn binding(self: *const Self, binding_id: u32) webgpu.BindGroupEntry {
             return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
         }
     };
@@ -157,16 +156,16 @@ pub fn Uniform(comptime T: type) type {
             self.handle.release();
         }
 
-        pub fn layout(self: Self, binding_id: u32, visibility: webgpu.ShaderStage) webgpu.BindGroupLayoutEntry {
+        pub fn layout(self: *const Self, binding_id: u32, visibility: webgpu.ShaderStage) webgpu.BindGroupLayoutEntry {
             _ = self;
             return .{ .binding = binding_id, .visibility = visibility, .buffer = .{ .binding_type = .uniform } };
         }
 
-        pub fn binding(self: Self, binding_id: u32) webgpu.BindGroupEntry {
+        pub fn binding(self: *const Self, binding_id: u32) webgpu.BindGroupEntry {
             return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
         }
 
-        pub fn write(self: Self, queue: webgpu.Queue, data: T) void {
+        pub fn write(self: *const Self, queue: webgpu.Queue, data: T) void {
             queue.writeBuffer(self.handle, 0, T, &[_]T{data});
         }
     };

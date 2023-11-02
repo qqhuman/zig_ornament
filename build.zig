@@ -70,8 +70,8 @@ pub const Package = struct {
         exe.linkSystemLibrary("amdhip64");
 
         exe.defineCMacro("__HIP_PLATFORM_AMD__", null);
-        exe.addIncludePath(std.Build.LazyPath.relative("src/hip"));
-        exe.addCSourceFile(.{ .file = .{ .path = "src/hip/hip.cpp" }, .flags = &.{""} });
+        exe.addIncludePath(std.Build.LazyPath.relative("src/hip_backend"));
+        exe.addCSourceFile(.{ .file = .{ .path = "src/hip_backend/hip.cpp" }, .flags = &.{""} });
 
         exe.step.dependOn(self.dep_steps);
         exe.addModule("ornament", self.ornament);
@@ -93,7 +93,7 @@ pub fn package(
         "--offload-arch=gfx1030",
         "-o",
         b.pathJoin(&.{ b.exe_dir, "pathtracer.co" }),
-        "src/hip/kernels/pathtracer.cpp",
+        "src/hip_backend/kernels/pathtracer.cpp",
     });
 
     const dep_steps = b.allocator.create(std.Build.Step) catch @panic("OOM");

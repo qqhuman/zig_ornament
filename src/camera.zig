@@ -79,19 +79,19 @@ pub const Camera = struct {
         );
     }
 
-    pub fn getAspectRatio(self: Self) f32 {
+    pub fn getAspectRatio(self: *const Self) f32 {
         return self.aspect_ratio;
     }
 
-    pub fn getLookFrom(self: Self) zmath.Vec {
+    pub fn getLookFrom(self: *const Self) zmath.Vec {
         return self.lookfrom;
     }
 
-    pub fn getLookAt(self: Self) zmath.Vec {
+    pub fn getLookAt(self: *const Self) zmath.Vec {
         return self.lookat;
     }
 
-    pub fn getVUp(self: Self) zmath.Vec {
+    pub fn getVUp(self: *const Self) zmath.Vec {
         return self.vup;
     }
 

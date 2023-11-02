@@ -1,6 +1,6 @@
 const std = @import("std");
 const zmath = @import("zmath");
-const Material = @import("../materials/material.zig").Material;
+const Material = @import("material.zig").Material;
 const Aabb = @import("aabb.zig").Aabb;
 
 pub const Mesh = struct {

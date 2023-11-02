@@ -3,8 +3,7 @@ const zmath = @import("zmath");
 const zglfw = @import("zglfw");
 const zstbi = @import("zstbi");
 const ornament = @import("ornament");
-const webgpu = ornament.webgpu;
-const Viewport = ornament.Viewport;
+const Viewport = @import("viewport.zig").Viewport;
 
 const WIDTH = 1000;
 const HEIGHT = 1000;
@@ -27,7 +26,7 @@ const App = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     window: *zglfw.Window,
-    ornament: ornament.Context,
+    path_tracer: ornament.WgpuPathTracer,
     viewport: ?Viewport,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
@@ -39,27 +38,29 @@ const App = struct {
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
         const window = try zglfw.Window.create(WIDTH, HEIGHT, TITLE, null);
 
-        var surface_descriptor_from_windows = webgpu.SurfaceDescriptorFromWindowsHWND{
+        var surface_descriptor_from_windows = ornament.wgpu_backend.webgpu.SurfaceDescriptorFromWindowsHWND{
             .chain = .{ .next = null, .struct_type = .surface_descriptor_from_windows_hwnd },
             .hwnd = try zglfw.native.getWin32Window(window),
             .hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable,
         };
-        var ornament_context = try ornament.Context.init(
+        var scene = ornament.Scene.init(allocator);
+        try @import("examples.zig").init_lucy_spheres_with_textures(&scene, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        var path_tracer = try ornament.WgpuPathTracer.init(
             allocator,
+            scene,
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
-        ornament_context.setGamma(2.2);
-        ornament_context.setFlipY(true);
-        ornament_context.setDepth(DEPTH);
-        ornament_context.setIterations(ITERATIONS);
-        try ornament_context.setResolution(ornament.Resolution{ .width = WIDTH, .height = HEIGHT });
-        try @import("examples.zig").init_cornell_box_with_lucy(&ornament_context, @as(f32, @floatCast(WIDTH)) / @as(f32, @floatCast(HEIGHT)));
+        path_tracer.state.setGamma(2.2);
+        path_tracer.state.setFlipY(true);
+        path_tracer.state.setDepth(DEPTH);
+        path_tracer.state.setIterations(ITERATIONS);
+        path_tracer.setResolution(ornament.Resolution{ .width = WIDTH, .height = HEIGHT });
 
-        const viewport = try ornament.Viewport.init(&ornament_context);
+        const viewport = try Viewport.init(&path_tracer);
         return .{
             .allocator = allocator,
             .window = window,
-            .ornament = ornament_context,
+            .path_tracer = path_tracer,
             .viewport = viewport,
         };
     }
@@ -67,7 +68,7 @@ const App = struct {
     pub fn deinit(self: *Self) void {
         std.log.debug("[glfw_example] deinit", .{});
         if (self.viewport) |*v| v.deinit();
-        self.ornament.deinit();
+        self.path_tracer.deinit();
         self.window.destroy();
         zglfw.terminate();
         zstbi.deinit();
@@ -82,10 +83,10 @@ const App = struct {
     fn onFramebufferSize(window: *zglfw.Window, width: i32, height: i32) callconv(.C) void {
         var self: *Self = window.getUserPointer(Self) orelse unreachable;
         const new_resolution = ornament.Resolution{ .width = @intCast(width), .height = @intCast(height) };
-        if (!std.meta.eql(self.ornament.getResolution(), new_resolution)) {
+        if (!std.meta.eql(self.path_tracer.state.getResolution(), new_resolution)) {
             std.log.debug("[glfw_example] onFramebufferSize width = {d}, height = {d}", .{ width, height });
-            self.ornament.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
-            self.ornament.setResolution(new_resolution) catch unreachable;
+            self.path_tracer.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
+            self.path_tracer.setResolution(new_resolution);
             if (self.viewport) |*v| {
                 v.deinit();
                 self.viewport = null;
@@ -102,9 +103,9 @@ const App = struct {
             const a_pressed = self.window.getKey(.a) == .press;
 
             if (w_pressed or s_pressed or d_pressed or a_pressed) {
-                const target = self.ornament.scene.camera.getLookAt();
-                var eye = self.ornament.scene.camera.getLookFrom();
-                const up = self.ornament.scene.camera.getVUp();
+                const target = self.path_tracer.scene.camera.getLookAt();
+                var eye = self.path_tracer.scene.camera.getLookFrom();
+                const up = self.path_tracer.scene.camera.getVUp();
                 var forward = target - eye;
                 const forward_norm = zmath.normalize3(forward);
                 var forward_mag = zmath.length3(forward);
@@ -132,7 +133,7 @@ const App = struct {
                 if (a_pressed) {
                     eye = target - zmath.normalize3((forward + right * CAMERA_SPEED)) * forward_mag;
                 }
-                self.ornament.scene.camera.setLookAt(eye, target, up);
+                self.path_tracer.scene.camera.setLookAt(eye, target, up);
             }
         }
     }
@@ -143,9 +144,9 @@ const App = struct {
         while (!self.window.shouldClose() and self.window.getKey(.escape) != .press) {
             zglfw.pollEvents();
             self.update();
-            try self.ornament.render();
+            try self.path_tracer.render();
             if (self.viewport == null) {
-                self.viewport = try Viewport.init(&self.ornament);
+                self.viewport = try Viewport.init(&self.path_tracer);
                 std.log.debug("[glfw_example] viewport was created", .{});
             }
             try self.viewport.?.render();

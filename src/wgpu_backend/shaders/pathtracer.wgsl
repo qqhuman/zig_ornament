@@ -106,10 +106,10 @@ fn ray_color(first_ray: Ray) -> vec3<f32> {
         var tri_id: u32;
         var uv: vec2<f32>;
         if !bvh_hit(ray, &t, &material_index, &node_type, &inverted_transform_id, &tri_id, &uv) {
-            // var unit_direction = normalize(ray.direction);
-            // var tt = 0.5 * (unit_direction.y + 1.0);
-            // final_color *= (1.0 - tt) * vec3<f32>(1.0) + tt * vec3<f32>(0.5, 0.7, 1.0);
-            final_color = vec3<f32>(0.0);
+            var unit_direction = normalize(ray.direction);
+            var tt = 0.5 * (unit_direction.y + 1.0);
+            final_color *= (1.0 - tt) * vec3<f32>(1.0) + tt * vec3<f32>(0.5, 0.7, 1.0);
+            //final_color = vec3<f32>(0.0);
             break;
         } 
 

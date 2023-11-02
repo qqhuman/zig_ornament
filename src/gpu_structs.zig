@@ -1,6 +1,7 @@
 const std = @import("std");
 const zmath = @import("zmath");
-const ornament = @import("../ornament.zig");
+const ornament = @import("ornament.zig");
+const State = @import("state.zig").State;
 
 pub const TARGET_PIXEL_COMPONENTS: u32 = 4;
 pub const Resolution = [2]u32;
@@ -60,7 +61,7 @@ pub const ConstantState = extern struct {
     ray_cast_epsilon: f32,
     textures_count: u32,
 
-    pub fn from(state: *const ornament.State, textures_count: u32) Self {
+    pub fn from(state: *const State) Self {
         return .{
             .depth = state.depth,
             .width = state.resolution.width,
@@ -68,7 +69,7 @@ pub const ConstantState = extern struct {
             .flip_y = if (state.flip_y) 1 else 0,
             .inverted_gamma = state.inverted_gamma,
             .ray_cast_epsilon = state.ray_cast_epsilon,
-            .textures_count = textures_count,
+            .textures_count = state.textures_count,
         };
     }
 };
