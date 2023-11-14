@@ -16,7 +16,7 @@ pub const Target = struct {
     workgroups: u32,
 
     pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, resolution: util.Resolution) !Self {
-        const pixels_count = resolution.width * resolution.height;
+        const pixels_count = resolution.pixels_count();
         const buffer = Storage(gpu_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
         const accumulation_buffer = Storage(gpu_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
 

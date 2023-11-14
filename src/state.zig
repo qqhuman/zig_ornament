@@ -8,7 +8,6 @@ pub const State = struct {
     inverted_gamma: f32,
     iterations: u32,
     ray_cast_epsilon: f32,
-    textures_count: u32,
     dirty: bool,
 
     pub fn init() Self {
@@ -19,7 +18,6 @@ pub const State = struct {
             .inverted_gamma = 1.0,
             .iterations = 1,
             .ray_cast_epsilon = 0.001,
-            .textures_count = 0,
             .dirty = true,
         };
     }
@@ -80,14 +78,5 @@ pub const State = struct {
 
     pub fn getRayCastEpsilon(self: *const Self) f32 {
         return self.ray_cast_epsilon;
-    }
-
-    pub fn setTexturesCount(self: *Self, count: u32) void {
-        self.textures_count = count;
-        self.makeDirty();
-    }
-
-    pub fn getTexturesCount(self: *const Self) u32 {
-        return self.textures_count;
     }
 };

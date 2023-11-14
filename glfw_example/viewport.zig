@@ -12,24 +12,27 @@ pub const Viewport = struct {
     shader_module: webgpu.ShaderModule,
     resolution: ornament.Resolution,
     dimensions_buffer: ornament.wgpu_backend.buffers.Uniform([2]u32),
+    target_buffer: ?ornament.wgpu_backend.buffers.Storage([4]f32),
 
-    pub fn init(path_tracer: *ornament.WgpuPathTracer) !Self {
+    pub fn init(
+        device_state: *const ornament.wgpu_backend.DeviceState,
+        resolution: ornament.Resolution,
+        optional_interop_target_buffer: ?*const ornament.wgpu_backend.buffers.Storage([4]f32),
+    ) !Self {
         var wgsl_descriptor = webgpu.ShaderModuleWgslDescriptor{
             .code = @embedFile("viewport.wgsl"),
             .chain = .{ .next = null, .struct_type = .shader_module_wgsl_descriptor },
         };
-        const shader_module = path_tracer.device_state.device.createShaderModule(.{
+        const shader_module = device_state.device.createShaderModule(.{
             .next_in_chain = @ptrCast(&wgsl_descriptor),
-            .label = "[glfw_example] wgpu viewport shader module",
+            .label = "[glfw_wgpu] wgpu viewport shader module",
         });
 
-        var resolution = path_tracer.state.getResolution();
-
-        const surface = path_tracer.device_state.surface orelse @panic("WGPUSurface is empty.");
-        const surface_capabilities = surface.getCapabilities(path_tracer.device_state.adapter);
+        const surface = device_state.surface orelse @panic("WGPUSurface is empty.");
+        const surface_capabilities = surface.getCapabilities(device_state.adapter);
         const format = webgpu.TextureFormat.bgra8_unorm;
         surface.configure(&.{
-            .device = path_tracer.device_state.device,
+            .device = device_state.device,
             .width = resolution.width,
             .height = resolution.height,
             .usage = .{ .render_attachment = true },
@@ -39,10 +42,20 @@ pub const Viewport = struct {
         });
 
         const dimensions_buffer = ornament.wgpu_backend.buffers.Uniform([2]u32).init(
-            path_tracer.device_state.device,
+            device_state.device,
             false,
             [2]u32{ resolution.width, resolution.height },
         );
+
+        var target_buffer: ?ornament.wgpu_backend.buffers.Storage([4]f32) = null;
+        const interop_target_buffer = optional_interop_target_buffer orelse itb: {
+            target_buffer = ornament.wgpu_backend.buffers.Storage([4]f32).init(
+                device_state.device,
+                true,
+                .{ .element_count = resolution.pixels_count() },
+            );
+            break :itb &target_buffer.?;
+        };
 
         const pipeline = ppl: {
             var targets = [_]webgpu.ColorTargetState{.{
@@ -54,32 +67,31 @@ pub const Viewport = struct {
                 .write_mask = webgpu.ColorWriteMask.all,
             }};
 
-            const target_buffer = try path_tracer.getOrCreateTargetBuffer();
             const bind_group_layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                target_buffer.layout(0, .{ .fragment = true }, true),
+                interop_target_buffer.layout(0, .{ .fragment = true }, true),
                 dimensions_buffer.layout(1, .{ .fragment = true }),
             };
-            const bind_group_layout = path_tracer.device_state.device.createBindGroupLayout(.{
-                .label = "[glfw_example] wgpu viewport render bgl",
+            const bind_group_layout = device_state.device.createBindGroupLayout(.{
+                .label = "[glfw_wgpu] wgpu viewport render bgl",
                 .entry_count = bind_group_layout_entries.len,
                 .entries = &bind_group_layout_entries,
             });
             defer bind_group_layout.release();
 
             const bind_group_entries = [_]webgpu.BindGroupEntry{
-                target_buffer.binding(0),
+                interop_target_buffer.binding(0),
                 dimensions_buffer.binding(1),
             };
-            const bind_group = path_tracer.device_state.device.createBindGroup(.{
-                .label = "[glfw_example] wgpu viewport render bl",
+            const bind_group = device_state.device.createBindGroup(.{
+                .label = "[glfw_wgpu] wgpu viewport render bl",
                 .layout = bind_group_layout,
                 .entry_count = bind_group_entries.len,
                 .entries = &bind_group_entries,
             });
 
             const bind_group_layouts = [_]webgpu.BindGroupLayout{bind_group_layout};
-            const pipeline_layout = path_tracer.device_state.device.createPipelineLayout(.{
-                .label = "[glfw_example] wgpu viewport render pl",
+            const pipeline_layout = device_state.device.createPipelineLayout(.{
+                .label = "[glfw_wgpu] wgpu viewport render pl",
                 .bind_group_layout_count = bind_group_layouts.len,
                 .bind_group_layouts = &bind_group_layouts,
             });
@@ -87,8 +99,8 @@ pub const Viewport = struct {
 
             break :ppl .{
                 .bind_group = bind_group,
-                .render_pipeline = path_tracer.device_state.device.createRenderPipeline(.{
-                    .label = "[glfw_example] wgpu viewport render pipeline",
+                .render_pipeline = device_state.device.createRenderPipeline(.{
+                    .label = "[glfw_wgpu] wgpu viewport render pipeline",
                     .layout = pipeline_layout,
                     .vertex = .{ .entry_point = "vs_main", .module = shader_module },
                     .fragment = &.{
@@ -108,13 +120,14 @@ pub const Viewport = struct {
 
         return .{
             .surface = surface,
-            .device = path_tracer.device_state.device,
-            .queue = path_tracer.device_state.queue,
+            .device = device_state.device,
+            .queue = device_state.queue,
             .shader_module = shader_module,
             .render_pipeline = pipeline.render_pipeline,
             .bind_group = pipeline.bind_group,
             .resolution = resolution,
             .dimensions_buffer = dimensions_buffer,
+            .target_buffer = target_buffer,
         };
     }
 
@@ -123,6 +136,7 @@ pub const Viewport = struct {
         self.bind_group.reference();
         self.shader_module.release();
         self.dimensions_buffer.deinit();
+        if (self.target_buffer) |*tb| tb.deinit();
     }
 
     pub fn render(self: *Self) !void {
@@ -132,7 +146,7 @@ pub const Viewport = struct {
             const view = output.texture.createView(&.{});
             defer view.release();
 
-            const commnad_encoder = self.device.createCommandEncoder(.{ .label = "[glfw_example] wgpu viewport command encoder" });
+            const commnad_encoder = self.device.createCommandEncoder(.{ .label = "[glfw_wgpu] wgpu viewport command encoder" });
             defer commnad_encoder.release();
             {
                 const color_attachments = [_]webgpu.RenderPassColorAttachment{.{
@@ -142,7 +156,7 @@ pub const Viewport = struct {
                     .clear_value = .{ .r = 0.9, .g = 0.1, .b = 0.2, .a = 1.0 },
                 }};
                 const render_pass = commnad_encoder.beginRenderPass(.{
-                    .label = "[glfw_example] wgpu viewport render pass",
+                    .label = "[glfw_wgpu] wgpu viewport render pass",
                     .color_attachment_count = color_attachments.len,
                     .color_attachments = &color_attachments,
                 });
@@ -155,7 +169,7 @@ pub const Viewport = struct {
                 render_pass.draw(3, 1, 0, 0);
             }
 
-            const command = commnad_encoder.finish(.{ .label = "[glfw_example] wgpu viewport command buffer" });
+            const command = commnad_encoder.finish(.{ .label = "[glfw_wgpu] wgpu viewport command buffer" });
             defer command.release();
             self.queue.submit(&[_]webgpu.CommandBuffer{command});
             self.surface.present();

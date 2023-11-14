@@ -61,7 +61,7 @@ pub const ConstantState = extern struct {
     ray_cast_epsilon: f32,
     textures_count: u32,
 
-    pub fn from(state: *const State) Self {
+    pub fn from(state: *const State, textures_count: u32) Self {
         return .{
             .depth = state.depth,
             .width = state.resolution.width,
@@ -69,7 +69,7 @@ pub const ConstantState = extern struct {
             .flip_y = if (state.flip_y) 1 else 0,
             .inverted_gamma = state.inverted_gamma,
             .ray_cast_epsilon = state.ray_cast_epsilon,
-            .textures_count = state.textures_count,
+            .textures_count = textures_count,
         };
     }
 };

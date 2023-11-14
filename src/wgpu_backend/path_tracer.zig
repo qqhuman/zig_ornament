@@ -40,13 +40,23 @@ pub const PathTracer = struct {
     blas_nodes_buffer: buffers.Storage(gpu_structs.Node),
 
     pub fn init(allocator: std.mem.Allocator, scene: ornament.Scene, surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
-        const device_state = try DeviceState.init(allocator, surface_descriptor);
+        const device_state = try DeviceState.init(
+            allocator,
+            &.{
+                .texture_binding_array,
+                .sampled_texture_and_storage_buffer_array_non_uniform_indexing,
+            },
+            surface_descriptor,
+        );
 
         var state = State.init();
-        state.setTexturesCount(@truncate(scene.textures.items.len));
         const dynamic_state = gpu_structs.DynamicState{};
         const dynamic_state_buffer = buffers.Uniform(gpu_structs.DynamicState).init(device_state.device, false, dynamic_state);
-        const constant_state_buffer = buffers.Uniform(gpu_structs.ConstantState).init(device_state.device, false, gpu_structs.ConstantState.from(&state));
+        const constant_state_buffer = buffers.Uniform(gpu_structs.ConstantState).init(
+            device_state.device,
+            false,
+            gpu_structs.ConstantState.from(&state, @truncate(scene.textures.items.len)),
+        );
         const camera_buffer = buffers.Uniform(gpu_structs.Camera).init(device_state.device, false, gpu_structs.Camera.from(&scene.camera));
 
         var bvh = try Bvh.init(allocator, &scene);
@@ -224,7 +234,10 @@ pub const PathTracer = struct {
         if (self.state.dirty) {
             dirty = true;
             self.state.dirty = false;
-            self.constant_state_buffer.write(self.device_state.queue, gpu_structs.ConstantState.from(&self.state));
+            self.constant_state_buffer.write(
+                self.device_state.queue,
+                gpu_structs.ConstantState.from(&self.state, @truncate(self.scene.textures.items.len)),
+            );
         }
 
         if (dirty) self.reset();

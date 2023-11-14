@@ -14,7 +14,11 @@ pub const DeviceState = struct {
     device: webgpu.Device,
     queue: webgpu.Queue,
 
-    pub fn init(allocator: std.mem.Allocator, surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
+    pub fn init(
+        allocator: std.mem.Allocator,
+        required_features: []const webgpu.FeatureName,
+        surface_descriptor: ?webgpu.SurfaceDescriptor,
+    ) !Self {
         const instance = webgpu.createInstance(null);
         const surface = if (surface_descriptor) |desc| createSurface(instance, desc) else null;
 
@@ -33,22 +37,6 @@ pub const DeviceState = struct {
         std.log.debug("[ornament] adapter type: {s}", .{@tagName(properties.adapter_type)});
         std.log.debug("[ornament] adapter backend type: {s}", .{@tagName(properties.backend_type)});
 
-        // get features
-        const features_count = adapter.enumerateFeatures(null);
-        var features = try allocator.alloc(webgpu.FeatureName, features_count);
-        defer allocator.free(features);
-        _ = adapter.enumerateFeatures(features.ptr);
-        var has_texture_binding_array_feature = false;
-        var has_sampled_texture_and_storage_buffer_array_non_uniform_indexing_feature = false;
-        for (features) |f| {
-            std.log.debug("[ornament] adapter feature: {any}", .{f});
-            switch (f) {
-                .texture_binding_array => has_texture_binding_array_feature = true,
-                .sampled_texture_and_storage_buffer_array_non_uniform_indexing => has_sampled_texture_and_storage_buffer_array_non_uniform_indexing_feature = true,
-                else => {},
-            }
-        }
-
         if (adapter.getLimits()) |limits| {
             std.log.debug("[ornament] supported limit max_bind_groups: {any}", .{limits.limits.max_bind_groups});
             std.log.debug("[ornament] supported limit max_bindings_per_bind_group: {any}", .{limits.limits.max_bindings_per_bind_group});
@@ -62,22 +50,34 @@ pub const DeviceState = struct {
             std.log.debug("[ornament] supported limit max_samplers_per_shader_stage: {any}", .{limits.limits.max_samplers_per_shader_stage});
         }
 
-        if (!has_texture_binding_array_feature) {
-            @panic("Adapter doesn't support texture_binding_array feature.");
+        // get features
+        var missing_features = std.AutoHashMap(webgpu.FeatureName, void).init(allocator);
+        defer missing_features.deinit();
+        for (required_features) |f| {
+            try missing_features.put(f, {});
         }
 
-        if (!has_sampled_texture_and_storage_buffer_array_non_uniform_indexing_feature) {
-            @panic("Adapter doesn't support sampled_texture_and_storage_buffer_array_non_uniform_indexing feature.");
+        const features_count = adapter.enumerateFeatures(null);
+        var features = try allocator.alloc(webgpu.FeatureName, features_count);
+        defer allocator.free(features);
+        _ = adapter.enumerateFeatures(features.ptr);
+        for (features) |f| {
+            std.log.debug("[ornament] adapter feature: {any}", .{f});
+            _ = missing_features.remove(f);
         }
 
-        const required_features = [_]webgpu.FeatureName{
-            .texture_binding_array,
-            .sampled_texture_and_storage_buffer_array_non_uniform_indexing,
-        };
+        if (missing_features.count() > 0) {
+            var it = missing_features.keyIterator();
+            while (it.next()) |f| {
+                std.log.err("[ornament] adapter missing feature: {any}", .{f});
+            }
+            @panic("Adapter doesn't support required features.");
+        }
+
         const device = try requestDevice(adapter, .{
             .label = "[ornament] wgpu device",
             .required_feature_count = required_features.len,
-            .required_features = &required_features,
+            .required_features = required_features.ptr,
         });
         device.setUncapturedErrorCallback(onUncapturedError, null);
 
