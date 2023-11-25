@@ -19,8 +19,8 @@ pub const Bvh = struct {
     // nodes = shapes * 2 - 1
     // BLAS nodes count of one mesh:
     // nodes = triangles * 2 - 1
-    tlas_nodes: std.ArrayList(gpu_structs.Node),
-    blas_nodes: std.ArrayList(gpu_structs.Node),
+    tlas_nodes: std.ArrayList(gpu_structs.BvhNode),
+    blas_nodes: std.ArrayList(gpu_structs.BvhNode),
     normals: std.ArrayList(gpu_structs.Normal),
     normal_indices: std.ArrayList(u32),
     uvs: std.ArrayList(gpu_structs.Uv),
@@ -49,8 +49,8 @@ pub const Bvh = struct {
             uv_indices_count += m.uv_indices.items.len;
         }
         var self = Self{
-            .tlas_nodes = try std.ArrayList(gpu_structs.Node).initCapacity(allocator, tlas_nodes_count),
-            .blas_nodes = try std.ArrayList(gpu_structs.Node).initCapacity(allocator, blas_nodes_count),
+            .tlas_nodes = try std.ArrayList(gpu_structs.BvhNode).initCapacity(allocator, tlas_nodes_count),
+            .blas_nodes = try std.ArrayList(gpu_structs.BvhNode).initCapacity(allocator, blas_nodes_count),
             .normals = try std.ArrayList(gpu_structs.Normal).initCapacity(allocator, normals_count),
             .normal_indices = try std.ArrayList(u32).initCapacity(allocator, normal_indices_count),
             .uvs = try std.ArrayList(gpu_structs.Uv).initCapacity(allocator, uvs_count),
@@ -223,7 +223,7 @@ fn buildMeshBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh) s
     mesh.bvh_id = mesh_top_id;
 }
 
-fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Triangle) std.mem.Allocator.Error!gpu_structs.Node {
+fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Triangle) std.mem.Allocator.Error!gpu_structs.BvhNode {
     if (leafs.len == 0) {
         @panic("don't support empty bvh");
     } else if (leafs.len == 1) {
@@ -274,7 +274,7 @@ fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Trian
     }
 }
 
-fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf) std.mem.Allocator.Error!gpu_structs.Node {
+fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf) std.mem.Allocator.Error!gpu_structs.BvhNode {
     if (leafs.len == 0) {
         @panic("don't support empty bvh");
     } else if (leafs.len == 1) {

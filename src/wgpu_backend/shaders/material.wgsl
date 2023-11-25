@@ -89,7 +89,7 @@ fn material_emit(hit: HitRecord) -> vec3<f32> {
 }
 
 fn material_get_color(color: vec3<f32>, uv: vec2<f32>, texture_id: u32) -> vec3<f32> {
-    if texture_id < constant_state.textures_count {
+    if texture_id < constant_params.textures_count {
         let t = textures[texture_id];
         let s = samplers[texture_id];
         return textureSampleLevel(t, s, uv, 0.0).xyz;

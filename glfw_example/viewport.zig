@@ -52,7 +52,7 @@ pub const Viewport = struct {
             target_buffer = ornament.wgpu_backend.buffers.Storage([4]f32).init(
                 device_state.device,
                 true,
-                .{ .element_count = resolution.pixels_count() },
+                .{ .element_count = resolution.pixel_count() },
             );
             break :itb &target_buffer.?;
         };
@@ -137,6 +137,13 @@ pub const Viewport = struct {
         self.shader_module.release();
         self.dimensions_buffer.deinit();
         if (self.target_buffer) |*tb| tb.deinit();
+    }
+
+    pub fn renderFrameBuffer(self: *Self, frame_buffer: [][4]f32) !void {
+        if (self.target_buffer) |*tb| {
+            tb.write(self.queue, frame_buffer);
+        }
+        return self.render();
     }
 
     pub fn render(self: *Self) !void {

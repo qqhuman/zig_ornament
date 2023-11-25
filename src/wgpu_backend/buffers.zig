@@ -11,12 +11,11 @@ pub const Target = struct {
     buffer: Storage(gpu_structs.Vector4),
     accumulation_buffer: Storage(gpu_structs.Vector4),
     rng_state_buffer: Storage(u32),
-    pixels_count: u32,
     resolution: util.Resolution,
     workgroups: u32,
 
     pub fn init(allocator: std.mem.Allocator, device: webgpu.Device, resolution: util.Resolution) !Self {
-        const pixels_count = resolution.pixels_count();
+        const pixels_count = resolution.pixel_count();
         const buffer = Storage(gpu_structs.Vector4).init(device, true, .{ .element_count = pixels_count });
         const accumulation_buffer = Storage(gpu_structs.Vector4).init(device, false, .{ .element_count = pixels_count });
 
@@ -36,7 +35,6 @@ pub const Target = struct {
             .buffer = buffer,
             .accumulation_buffer = accumulation_buffer,
             .rng_state_buffer = rng_state_buffer,
-            .pixels_count = pixels_count,
             .resolution = resolution,
             .workgroups = workgroups,
         };
@@ -68,10 +66,11 @@ pub fn Storage(comptime T: type) type {
         handle: webgpu.Buffer,
         padded_size_in_bytes: u64,
 
-        pub fn init(device: webgpu.Device, copy_src: bool, init_data: union(enum) { element_count: u64, data: []const T }) Self {
+        pub fn init(device: webgpu.Device, copy: bool, init_data: union(enum) { element_count: u64, data: []const T }) Self {
             var usage = webgpu.BufferUsage{ .storage = true };
-            if (copy_src) {
+            if (copy) {
                 usage.copy_src = true;
+                usage.copy_dst = true;
             }
 
             const label = "[ornament] []" ++ @typeName(T) ++ " storage";
@@ -122,6 +121,10 @@ pub fn Storage(comptime T: type) type {
 
         pub fn binding(self: *const Self, binding_id: u32) webgpu.BindGroupEntry {
             return .{ .binding = binding_id, .size = self.padded_size_in_bytes, .buffer = self.handle };
+        }
+
+        pub fn write(self: *const Self, queue: webgpu.Queue, data: []const T) void {
+            queue.writeBuffer(self.handle, 0, T, data);
         }
     };
 }

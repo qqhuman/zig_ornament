@@ -4,6 +4,7 @@ const zglfw = @import("zglfw");
 const zstbi = @import("zstbi");
 const ornament = @import("ornament");
 const Viewport = @import("viewport.zig").Viewport;
+const FpsCounter = @import("fps_counter.zig").FpsCounter;
 const app_config = @import("app_config.zig");
 
 pub fn run() !void {
@@ -11,9 +12,9 @@ pub fn run() !void {
     defer if (gpa.deinit() == .leak) @panic("[glfw_wgpu] memory leak");
 
     var app = try App.init(gpa.allocator());
-    defer app.deinit();
     app.setUpCallbacks();
     try app.renderLoop();
+    try app.deinit();
 }
 
 const App = struct {
@@ -21,8 +22,10 @@ const App = struct {
     allocator: std.mem.Allocator,
     window: *zglfw.Window,
     resolution: ornament.Resolution,
-    viewport: ?Viewport,
+    path_tracer: ornament.HipPathTracer,
     wgpu_device_state: ornament.wgpu_backend.DeviceState,
+    viewport: ?Viewport,
+    frame_buffer: [][4]f32,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_wgpu] init", .{});
@@ -32,8 +35,17 @@ const App = struct {
 
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
         const window = try zglfw.Window.create(app_config.WIDTH, app_config.HEIGHT, app_config.TITLE, null);
-        // var scene = ornament.Scene.init(allocator);
-        // try @import("examples.zig").init_lucy_spheres_with_textures(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
+
+        var scene = ornament.Scene.init(allocator);
+        try @import("examples.zig").init_spheres(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
+        var path_tracer = try ornament.HipPathTracer.init(allocator, scene);
+
+        path_tracer.state.setGamma(app_config.GAMMA);
+        path_tracer.state.setFlipY(app_config.FLIP_Y);
+        path_tracer.state.setDepth(app_config.DEPTH);
+        path_tracer.state.setIterations(app_config.ITERATIONS);
+        try path_tracer.setResolution(ornament.Resolution{ .width = app_config.WIDTH, .height = app_config.HEIGHT });
+
         var surface_descriptor_from_windows = ornament.wgpu_backend.webgpu.SurfaceDescriptorFromWindowsHWND{
             .chain = .{ .next = null, .struct_type = .surface_descriptor_from_windows_hwnd },
             .hwnd = try zglfw.native.getWin32Window(window),
@@ -44,21 +56,25 @@ const App = struct {
             &.{},
             .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
         );
-        const resolution = ornament.Resolution{ .width = app_config.WIDTH, .height = app_config.HEIGHT };
-        const viewport = try Viewport.init(&wgpu_device_state, resolution, null);
+
+        const viewport = try Viewport.init(&wgpu_device_state, path_tracer.state.resolution, null);
         return .{
             .allocator = allocator,
             .window = window,
-            .resolution = resolution,
-            .viewport = viewport,
+            .resolution = path_tracer.state.resolution,
+            .path_tracer = path_tracer,
             .wgpu_device_state = wgpu_device_state,
+            .viewport = viewport,
+            .frame_buffer = try allocator.alloc([4]f32, path_tracer.state.resolution.pixel_count()),
         };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: *Self) !void {
         std.log.debug("[glfw_wgpu] deinit", .{});
+        self.allocator.free(self.frame_buffer);
         if (self.viewport) |*v| v.deinit();
         self.wgpu_device_state.deinit();
+        try self.path_tracer.deinit();
         self.window.destroy();
         zglfw.terminate();
         zstbi.deinit();
@@ -76,6 +92,12 @@ const App = struct {
         if (!std.meta.eql(self.resolution, new_resolution)) {
             std.log.debug("[glfw_wgpu] onFramebufferSize width = {d}, height = {d}", .{ width, height });
             self.resolution = new_resolution;
+            self.path_tracer.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
+            self.path_tracer.setResolution(new_resolution) catch unreachable;
+
+            self.allocator.free(self.frame_buffer);
+            self.frame_buffer = self.allocator.alloc([4]f32, new_resolution.pixel_count()) catch unreachable;
+
             if (self.viewport) |*v| {
                 v.deinit();
                 self.viewport = null;
@@ -83,7 +105,7 @@ const App = struct {
         }
     }
 
-    pub fn update(self: *Self, scene: *ornament.Scene) void {
+    pub fn update(self: *Self) void {
         // WSDA
         {
             const w_pressed = self.window.getKey(.w) == .press;
@@ -92,9 +114,9 @@ const App = struct {
             const a_pressed = self.window.getKey(.a) == .press;
 
             if (w_pressed or s_pressed or d_pressed or a_pressed) {
-                const target = scene.camera.getLookAt();
-                var eye = scene.camera.getLookFrom();
-                const up = scene.camera.getVUp();
+                const target = self.path_tracer.scene.camera.getLookAt();
+                var eye = self.path_tracer.scene.camera.getLookFrom();
+                const up = self.path_tracer.scene.camera.getVUp();
                 var forward = target - eye;
                 const forward_norm = zmath.normalize3(forward);
                 var forward_mag = zmath.length3(forward);
@@ -122,7 +144,7 @@ const App = struct {
                 if (a_pressed) {
                     eye = target - zmath.normalize3((forward + right * app_config.CAMERA_SPEED)) * forward_mag;
                 }
-                scene.camera.setLookAt(eye, target, up);
+                self.path_tracer.scene.camera.setLookAt(eye, target, up);
             }
         }
     }
@@ -132,36 +154,15 @@ const App = struct {
         var fps_counter = FpsCounter.init();
         while (!self.window.shouldClose() and self.window.getKey(.escape) != .press) {
             zglfw.pollEvents();
-            //self.update();
+            self.update();
             if (self.viewport == null) {
                 self.viewport = try Viewport.init(&self.wgpu_device_state, self.resolution, null);
                 std.log.debug("[glfw_wgpu] viewport was created", .{});
             }
-            try self.viewport.?.render();
+            try self.path_tracer.render();
+            try self.path_tracer.getFrameBuffer(self.frame_buffer);
+            try self.viewport.?.renderFrameBuffer(self.frame_buffer);
             fps_counter.endFrames(app_config.ITERATIONS);
-        }
-    }
-};
-
-pub const FpsCounter = struct {
-    pub const Self = @This();
-    timer: std.time.Timer,
-    frames: u32,
-
-    pub fn init() Self {
-        return .{
-            .frames = 0,
-            .timer = std.time.Timer.start() catch unreachable,
-        };
-    }
-
-    pub fn endFrames(self: *Self, frames: u32) void {
-        self.frames += frames;
-        const delta_time = @as(f64, @floatFromInt(self.timer.read())) / std.time.ns_per_s;
-        if (delta_time > 1.0) {
-            std.log.debug("FPS: {d}", .{@as(f64, @floatFromInt(self.frames)) / delta_time});
-            self.frames = 0;
-            self.timer.reset();
         }
     }
 };

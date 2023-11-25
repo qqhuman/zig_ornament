@@ -16,7 +16,6 @@ pub const PathTracer = struct {
     allocator: std.mem.Allocator,
     scene: Scene,
     state: State,
-    dynamic_state: gpu_structs.DynamicState,
     resolution: util.Resolution,
 
     device_state: DeviceState,
@@ -25,8 +24,7 @@ pub const PathTracer = struct {
 
     target_buffer: ?buffers.Target,
 
-    dynamic_state_buffer: buffers.Uniform(gpu_structs.DynamicState),
-    constant_state_buffer: buffers.Uniform(gpu_structs.ConstantState),
+    constant_params_buffer: buffers.Uniform(gpu_structs.ConstantParams),
     camera_buffer: buffers.Uniform(gpu_structs.Camera),
 
     textures: buffers.Textures,
@@ -36,8 +34,8 @@ pub const PathTracer = struct {
     uvs_buffer: buffers.Storage(gpu_structs.Uv),
     uv_indices_buffer: buffers.Storage(u32),
     transforms_buffer: buffers.Storage(gpu_structs.Transform),
-    tlas_nodes_buffer: buffers.Storage(gpu_structs.Node),
-    blas_nodes_buffer: buffers.Storage(gpu_structs.Node),
+    tlas_nodes_buffer: buffers.Storage(gpu_structs.BvhNode),
+    blas_nodes_buffer: buffers.Storage(gpu_structs.BvhNode),
 
     pub fn init(allocator: std.mem.Allocator, scene: ornament.Scene, surface_descriptor: ?webgpu.SurfaceDescriptor) !Self {
         const device_state = try DeviceState.init(
@@ -50,12 +48,10 @@ pub const PathTracer = struct {
         );
 
         var state = State.init();
-        const dynamic_state = gpu_structs.DynamicState{};
-        const dynamic_state_buffer = buffers.Uniform(gpu_structs.DynamicState).init(device_state.device, false, dynamic_state);
-        const constant_state_buffer = buffers.Uniform(gpu_structs.ConstantState).init(
+        const constant_params_buffer = buffers.Uniform(gpu_structs.ConstantParams).init(
             device_state.device,
             false,
-            gpu_structs.ConstantState.from(&state, @truncate(scene.textures.items.len)),
+            gpu_structs.ConstantParams.from(&state, @truncate(scene.textures.items.len)),
         );
         const camera_buffer = buffers.Uniform(gpu_structs.Camera).init(device_state.device, false, gpu_structs.Camera.from(&scene.camera));
 
@@ -64,8 +60,8 @@ pub const PathTracer = struct {
         const textures = try buffers.Textures.init(allocator, bvh.textures.items, device_state.device, device_state.queue);
 
         const materials_buffer = buffers.Storage(gpu_structs.Material).init(device_state.device, false, .{ .data = bvh.materials.items });
-        const tlas_nodes_buffer = buffers.Storage(gpu_structs.Node).init(device_state.device, false, .{ .data = bvh.tlas_nodes.items });
-        const blas_nodes_buffer = buffers.Storage(gpu_structs.Node).init(device_state.device, false, .{ .data = bvh.blas_nodes.items });
+        const tlas_nodes_buffer = buffers.Storage(gpu_structs.BvhNode).init(device_state.device, false, .{ .data = bvh.tlas_nodes.items });
+        const blas_nodes_buffer = buffers.Storage(gpu_structs.BvhNode).init(device_state.device, false, .{ .data = bvh.blas_nodes.items });
         const normals_buffer = buffers.Storage(gpu_structs.Normal).init(device_state.device, false, .{ .data = bvh.normals.items });
         const normal_indices_buffer = buffers.Storage(u32).init(device_state.device, false, .{ .data = bvh.normal_indices.items });
         const uvs_buffer = buffers.Storage(gpu_structs.Uv).init(device_state.device, false, .{ .data = bvh.uvs.items });
@@ -94,15 +90,13 @@ pub const PathTracer = struct {
             .allocator = allocator,
             .scene = scene,
             .state = state,
-            .dynamic_state = dynamic_state,
             .resolution = state.getResolution(),
 
             .device_state = device_state,
             .shader_module = createShaderModule(device_state.device),
             .pipeline = null,
             .target_buffer = null,
-            .dynamic_state_buffer = dynamic_state_buffer,
-            .constant_state_buffer = constant_state_buffer,
+            .constant_params_buffer = constant_params_buffer,
             .camera_buffer = camera_buffer,
 
             .textures = textures,
@@ -131,8 +125,7 @@ pub const PathTracer = struct {
         self.tlas_nodes_buffer.deinit();
         self.blas_nodes_buffer.deinit();
 
-        self.dynamic_state_buffer.deinit();
-        self.constant_state_buffer.deinit();
+        self.constant_params_buffer.deinit();
         self.camera_buffer.deinit();
         self.shader_module.release();
         self.device_state.deinit();
@@ -188,8 +181,7 @@ pub const PathTracer = struct {
                 self.device_state.device,
                 self.shader_module,
                 target_buffer,
-                &self.dynamic_state_buffer,
-                &self.constant_state_buffer,
+                &self.constant_params_buffer,
                 &self.camera_buffer,
                 &self.materials_buffer,
                 &self.textures,
@@ -219,11 +211,7 @@ pub const PathTracer = struct {
         }
     }
 
-    pub fn reset(self: *Self) void {
-        self.dynamic_state.reset();
-    }
-
-    pub fn update(self: *Self) void {
+    fn update(self: *Self) void {
         var dirty = false;
         if (self.scene.camera.dirty) {
             dirty = true;
@@ -234,15 +222,14 @@ pub const PathTracer = struct {
         if (self.state.dirty) {
             dirty = true;
             self.state.dirty = false;
-            self.constant_state_buffer.write(
-                self.device_state.queue,
-                gpu_structs.ConstantState.from(&self.state, @truncate(self.scene.textures.items.len)),
-            );
         }
 
-        if (dirty) self.reset();
-        self.dynamic_state.nextIteration();
-        self.dynamic_state_buffer.write(self.device_state.queue, self.dynamic_state);
+        if (dirty) self.state.reset();
+        self.state.nextIteration();
+        self.constant_params_buffer.write(
+            self.device_state.queue,
+            gpu_structs.ConstantParams.from(&self.state, @truncate(self.scene.textures.items.len)),
+        );
     }
 
     fn runPipeline(self: *Self, pipeline: webgpu.ComputePipeline, bind_groups: [4]webgpu.BindGroup, comptime pipeline_name: []const u8) !void {
@@ -297,8 +284,7 @@ pub const Pipeline = struct {
         device: webgpu.Device,
         shader_module: webgpu.ShaderModule,
         target_buffer: *const buffers.Target,
-        dynamic_state_buffer: *const buffers.Uniform(gpu_structs.DynamicState),
-        constant_state_buffer: *const buffers.Uniform(gpu_structs.ConstantState),
+        constant_params_buffer: *const buffers.Uniform(gpu_structs.ConstantParams),
         camera_buffer: *const buffers.Uniform(gpu_structs.Camera),
         materials_buffer: *const buffers.Storage(gpu_structs.Material),
         textures: *const buffers.Textures,
@@ -307,8 +293,8 @@ pub const Pipeline = struct {
         uvs_buffer: *const buffers.Storage(gpu_structs.Uv),
         uv_indices_buffer: *const buffers.Storage(u32),
         transforms_buffer: *const buffers.Storage(gpu_structs.Transform),
-        tlas_nodes_buffer: *const buffers.Storage(gpu_structs.Node),
-        blas_nodes_buffer: *const buffers.Storage(gpu_structs.Node),
+        tlas_nodes_buffer: *const buffers.Storage(gpu_structs.BvhNode),
+        blas_nodes_buffer: *const buffers.Storage(gpu_structs.BvhNode),
     ) Self {
         const compute_visibility: webgpu.ShaderStage = .{ .compute = true };
         var bind_groups: [4]webgpu.BindGroup = undefined;
@@ -344,9 +330,8 @@ pub const Pipeline = struct {
 
         {
             const layout_entries = [_]webgpu.BindGroupLayoutEntry{
-                dynamic_state_buffer.layout(0, compute_visibility),
-                constant_state_buffer.layout(1, compute_visibility),
-                camera_buffer.layout(2, compute_visibility),
+                constant_params_buffer.layout(0, compute_visibility),
+                camera_buffer.layout(1, compute_visibility),
             };
             const bgl = device.createBindGroupLayout(.{
                 .label = "[ornament] dynstate conststate camera bgl",
@@ -355,9 +340,8 @@ pub const Pipeline = struct {
             });
 
             const group_entries = [_]webgpu.BindGroupEntry{
-                dynamic_state_buffer.binding(0),
-                constant_state_buffer.binding(1),
-                camera_buffer.binding(2),
+                constant_params_buffer.binding(0),
+                camera_buffer.binding(1),
             };
             const bg = device.createBindGroup(.{
                 .label = "[ornament] dynstate conststate camera bg",

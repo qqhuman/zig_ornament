@@ -3,7 +3,6 @@ struct HitRecord {
     normal: vec3<f32>,
     uv: vec2<f32>,
     material_index: u32,
-    material_type: u32,
     t: f32,
     front_face: bool
 }

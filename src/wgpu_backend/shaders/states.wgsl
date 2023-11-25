@@ -1,8 +1,4 @@
-struct DynamicState {
-    current_iteration : f32,
-}
-
-struct ConstantState {
+struct ConstantParams {
     depth : u32,
     width: u32,
     height: u32,
@@ -10,4 +6,5 @@ struct ConstantState {
     inverted_gamma: f32,
     ray_cast_epsilon: f32,
     textures_count: u32,
+    current_iteration : f32,
 }

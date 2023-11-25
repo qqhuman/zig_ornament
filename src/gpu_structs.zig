@@ -12,7 +12,7 @@ pub const Normal = [4]f32; // 4th byte is padding
 pub const Uv = [2]f32;
 pub const Transform = [16]f32;
 
-pub const Node = extern struct {
+pub const BvhNode = extern struct {
     left_aabb_min_or_v0: [3]f32,
     left_or_custom_id: u32, // bvh node/top of mesh bvh/triangle id
     left_aabb_max_or_v1: [3]f32,
@@ -51,7 +51,7 @@ pub const Material = extern struct {
     }
 };
 
-pub const ConstantState = extern struct {
+pub const ConstantParams = extern struct {
     const Self = @This();
     depth: u32,
     width: u32,
@@ -60,6 +60,7 @@ pub const ConstantState = extern struct {
     inverted_gamma: f32,
     ray_cast_epsilon: f32,
     textures_count: u32,
+    current_iteration: f32 = 0.0,
 
     pub fn from(state: *const State, textures_count: u32) Self {
         return .{
@@ -70,20 +71,8 @@ pub const ConstantState = extern struct {
             .inverted_gamma = state.inverted_gamma,
             .ray_cast_epsilon = state.ray_cast_epsilon,
             .textures_count = textures_count,
+            .current_iteration = state.current_iteration,
         };
-    }
-};
-
-pub const DynamicState = extern struct {
-    const Self = @This();
-    current_iteration: f32 = 0.0,
-
-    pub fn nextIteration(self: *Self) void {
-        self.current_iteration += 1.0;
-    }
-
-    pub fn reset(self: *Self) void {
-        self.current_iteration = 0.0;
     }
 };
 

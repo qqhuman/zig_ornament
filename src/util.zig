@@ -5,7 +5,7 @@ pub const Resolution = struct {
     width: u32,
     height: u32,
 
-    pub fn pixels_count(self: *const Self) u32 {
+    pub fn pixel_count(self: *const Self) u32 {
         return self.width * self.height;
     }
 };

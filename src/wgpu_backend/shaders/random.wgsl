@@ -18,7 +18,7 @@ fn random_u32() -> u32 {
 }
 
 fn random_f32() -> f32 {
-    return f32(random_u32()) / f32(0xffffffffu);
+    return f32(random_u32()) * (1.0 / 4294967296.0);
 }
 
 fn random_f32_between(min: f32, max: f32) -> f32 {

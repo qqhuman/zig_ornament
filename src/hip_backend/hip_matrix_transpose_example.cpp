@@ -1,35 +1,21 @@
-/*
-Copyright (c) 2015 - 2021 Advanced Micro Devices, Inc. All rights reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-*/
-
 #include <iostream>
-
-// hip header file
 #include "hip/hip_runtime.h"
-#include "hip_helper.h"
 
+#define checkHipErrors(err) __checkHipErrors(err, __FILE__, __LINE__)
+inline void __checkHipErrors(hipError_t err, const char *file, const int line) {
+  if (HIP_SUCCESS != err) {
+    const char *errorStr = hipGetErrorString(err);
+    fprintf(stderr,
+            "checkHipErrors() HIP API error = %04d \"%s\" from file <%s>, "
+            "line %i.\n",
+            err, errorStr, file, line);
+    hipDeviceReset();
+    exit(EXIT_FAILURE);
+  }
+}
 
+// Matrix Transpose example
 #define WIDTH 1024
-
-
 #define NUM (WIDTH * WIDTH)
 
 #define THREADS_PER_BLOCK_X 4
@@ -45,7 +31,7 @@ void matrixTransposeCPUReference(float* output, float* input, const unsigned int
     }
 }
 
-extern "C" void run(void) {
+extern "C" void matrixTransposeExample(void) {
     float* Matrix;
     float* TransposeMatrix;
     float* cpuTransposeMatrix;
@@ -53,10 +39,22 @@ extern "C" void run(void) {
     float* gpuMatrix;
     float* gpuTransposeMatrix;
 
-    hipDeviceProp_t devProp;
-    checkHipErrors(hipGetDeviceProperties(&devProp, 0));
-
-    std::cout << "Device name " << devProp.name << std::endl;
+    int deviceCount = 0;
+    checkHipErrors(hipGetDeviceCount(&deviceCount));
+    for (int deviceId = 0; deviceId < deviceCount; deviceId++) {
+        hipDeviceProp_t devProp;
+        checkHipErrors(hipGetDeviceProperties(&devProp, deviceId));
+        std::cout << "Device" << deviceId << std::endl;
+        std::cout << "      " << " name " << devProp.name << std::endl;
+        std::cout << "      " << " warpSize " << devProp.warpSize << std::endl;
+        std::cout << "      " << " totalGlobalMem " << devProp.totalGlobalMem / (1024.0 * 1024.0 * 1024.0) << "GB" << std::endl;
+        std::cout << "      " << " sharedMemPerBlock " << devProp.sharedMemPerBlock / (1024.0) << "KB" << std::endl;
+        std::cout << "      " << " regsPerBlock " << devProp.regsPerBlock << std::endl;
+        std::cout << "      " << " maxThreadsPerBlock " << devProp.maxThreadsPerBlock << std::endl;
+        std::cout << "      " << " integrated " << devProp.integrated << std::endl;
+        std::cout << "      " << " gcnArchName " << devProp.gcnArchName << std::endl;
+    }
+    checkHipErrors(hipSetDevice(deviceCount - 1));
 
     int i;
     int errors;
@@ -104,8 +102,8 @@ extern "C" void run(void) {
             THREADS_PER_BLOCK_Y, 
             1, 
             0, 
-            nullptr, 
-            nullptr, 
+            NULL, 
+            NULL, 
             config
         ));
 
@@ -135,6 +133,7 @@ extern "C" void run(void) {
     // free the resources on device side
     checkHipErrors(hipFree(gpuMatrix));
     checkHipErrors(hipFree(gpuTransposeMatrix));
+    checkHipErrors(hipDeviceReset());
 
     // free the resources on host side
     free(Matrix);

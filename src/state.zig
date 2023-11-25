@@ -9,6 +9,7 @@ pub const State = struct {
     iterations: u32,
     ray_cast_epsilon: f32,
     dirty: bool,
+    current_iteration: f32,
 
     pub fn init() Self {
         return .{
@@ -19,6 +20,7 @@ pub const State = struct {
             .iterations = 1,
             .ray_cast_epsilon = 0.001,
             .dirty = true,
+            .current_iteration = 0.0,
         };
     }
 
@@ -78,5 +80,13 @@ pub const State = struct {
 
     pub fn getRayCastEpsilon(self: *const Self) f32 {
         return self.ray_cast_epsilon;
+    }
+
+    pub fn nextIteration(self: *Self) void {
+        self.current_iteration += 1.0;
+    }
+
+    pub fn reset(self: *Self) void {
+        self.current_iteration = 0.0;
     }
 };

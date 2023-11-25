@@ -19,7 +19,7 @@ fn bvh_hit(not_transformed_ray: Ray,
         closest_tri_id: ptr<function, u32>,
         closest_uv: ptr<function, vec2<f32>>
     ) -> bool {
-    let t_min = constant_state.ray_cast_epsilon;
+    let t_min = constant_params.ray_cast_epsilon;
     var t_max = 3.40282e+38;
     
     let num_nodes = arrayLength(&bvh_tlas_nodes);

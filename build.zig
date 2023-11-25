@@ -71,7 +71,8 @@ pub const Package = struct {
 
         exe.defineCMacro("__HIP_PLATFORM_AMD__", null);
         exe.addIncludePath(std.Build.LazyPath.relative("src/hip_backend"));
-        exe.addCSourceFile(.{ .file = .{ .path = "src/hip_backend/hip.cpp" }, .flags = &.{""} });
+        exe.addCSourceFile(.{ .file = .{ .path = "src/hip_backend/hip.c" }, .flags = &.{""} });
+        exe.addCSourceFile(.{ .file = .{ .path = "src/hip_backend/hip_matrix_transpose_example.cpp" }, .flags = &.{""} });
 
         exe.step.dependOn(self.dep_steps);
         exe.addModule("ornament", self.ornament);
@@ -86,20 +87,39 @@ pub fn package(
         },
     },
 ) Package {
-    const install_wgpu = b.addInstallBinFile(std.build.LazyPath.relative("libs/wgpu-native/wgpu_native.dll"), "wgpu_native.dll");
-    const build_hip_kernals = b.addSystemCommand(&.{
+    // HIP
+    const hip_kernels_path = "src/hip_backend/kernels";
+    var hip_kernels_cpp = std.ArrayList([]const u8).init(b.allocator);
+    defer hip_kernels_cpp.deinit();
+    var hip_kernels_dir = std.fs.cwd().openIterableDir(hip_kernels_path, .{}) catch @panic("failed to open hip kernal folder");
+    defer hip_kernels_dir.close();
+
+    var iter = hip_kernels_dir.iterate();
+    while (iter.next() catch @panic("failed to iterate hip kernal files")) |entry| {
+        if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".hip.cpp")) {
+            hip_kernels_cpp.append(b.pathJoin(&.{ hip_kernels_path, entry.name })) catch @panic("failed to append hip kernal file");
+        }
+    }
+
+    const build_hip_kernels = b.addSystemCommand(&.{
         "hipcc",
         "--genco",
-        "--offload-arch=gfx1030",
+        "--offload-arch=gfx1030", // RX 6800XT
+        "--offload-arch=gfx1031", // RX 6800M
+        "--offload-arch=gfx90c", // APU 5900HX
+        "-fgpu-rdc",
         "-o",
         b.pathJoin(&.{ b.exe_dir, "pathtracer.co" }),
-        "src/hip_backend/kernels/pathtracer.cpp",
     });
+    build_hip_kernels.addArgs(hip_kernels_cpp.items);
+
+    // WGPU
+    const install_wgpu = b.addInstallBinFile(std.build.LazyPath.relative("libs/wgpu-native/wgpu_native.dll"), "wgpu_native.dll");
 
     const dep_steps = b.allocator.create(std.Build.Step) catch @panic("OOM");
     dep_steps.* = std.Build.Step.init(.{ .id = .custom, .name = "ornament. install wgpu. build hip kernels", .owner = b });
     dep_steps.dependOn(&install_wgpu.step);
-    dep_steps.dependOn(&build_hip_kernals.step);
+    dep_steps.dependOn(&build_hip_kernels.step);
     return .{
         .ornament = b.createModule(.{
             .source_file = .{ .path = "src/ornament.zig" },

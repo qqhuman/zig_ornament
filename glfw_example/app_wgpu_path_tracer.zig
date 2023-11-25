@@ -4,6 +4,7 @@ const zglfw = @import("zglfw");
 const zstbi = @import("zstbi");
 const ornament = @import("ornament");
 const Viewport = @import("viewport.zig").Viewport;
+const FpsCounter = @import("fps_counter.zig").FpsCounter;
 const app_config = @import("app_config.zig");
 
 pub fn run() !void {
@@ -147,29 +148,6 @@ const App = struct {
             }
             try self.viewport.?.render();
             fps_counter.endFrames(app_config.ITERATIONS);
-        }
-    }
-};
-
-pub const FpsCounter = struct {
-    pub const Self = @This();
-    timer: std.time.Timer,
-    frames: u32,
-
-    pub fn init() Self {
-        return .{
-            .frames = 0,
-            .timer = std.time.Timer.start() catch unreachable,
-        };
-    }
-
-    pub fn endFrames(self: *Self, frames: u32) void {
-        self.frames += frames;
-        const delta_time = @as(f64, @floatFromInt(self.timer.read())) / std.time.ns_per_s;
-        if (delta_time > 1.0) {
-            std.log.debug("FPS: {d}", .{@as(f64, @floatFromInt(self.frames)) / delta_time});
-            self.frames = 0;
-            self.timer.reset();
         }
     }
 };

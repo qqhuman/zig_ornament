@@ -11,6 +11,7 @@ pub const Texture = @import("texture.zig").Texture;
 pub const Color = @import("color.zig").Color;
 
 pub const wgpu_backend = @import("wgpu_backend/path_tracer.zig");
-pub const WgpuPathTracer = @import("wgpu_backend/path_tracer.zig").PathTracer;
+pub const WgpuPathTracer = wgpu_backend.PathTracer;
 
-pub const hip = @import("hip_backend/hip.zig");
+pub const hip_backend = @import("hip_backend/path_tracer.zig");
+pub const HipPathTracer = hip_backend.PathTracer;
