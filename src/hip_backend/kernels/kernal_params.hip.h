@@ -36,7 +36,7 @@ struct KernalLocalState
         rnd(kg.rng_seed_buffer[global_invocation_id])
     {}
 
-    HOST_DEVICE void save_rng_seed() {
+    HOST_DEVICE INLINE void save_rng_seed() {
         kg.rng_seed_buffer[global_invocation_id] = rnd.state;
     }
 };

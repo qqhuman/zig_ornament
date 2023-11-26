@@ -110,13 +110,13 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
             }
             case Mesh: 
             {
-                float4 n0 = kls->kg.normals.ptr[kls->kg.normal_indices.ptr[tri_id]];
-                float4 n1 = kls->kg.normals.ptr[kls->kg.normal_indices.ptr[tri_id + 1]];
-                float4 n2 = kls->kg.normals.ptr[kls->kg.normal_indices.ptr[tri_id + 2]];
+                float4 n0 = kls->kg.normals[kls->kg.normal_indices[tri_id]];
+                float4 n1 = kls->kg.normals[kls->kg.normal_indices[tri_id + 1]];
+                float4 n2 = kls->kg.normals[kls->kg.normal_indices[tri_id + 2]];
 
-                float2 uv0 = kls->kg.uvs.ptr[kls->kg.uv_indices.ptr[tri_id]];
-                float2 uv1 = kls->kg.uvs.ptr[kls->kg.uv_indices.ptr[tri_id + 1]];
-                float2 uv2 = kls->kg.uvs.ptr[kls->kg.uv_indices.ptr[tri_id + 2]];
+                float2 uv0 = kls->kg.uvs[kls->kg.uv_indices[tri_id]];
+                float2 uv1 = kls->kg.uvs[kls->kg.uv_indices[tri_id + 1]];
+                float2 uv2 = kls->kg.uvs[kls->kg.uv_indices[tri_id + 2]];
 
                 float w = 1.0f - uv.x - uv.y;
                 float4 normal = w * n0 + uv.x * n1 + uv.y * n2;
@@ -136,7 +136,7 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
 
         float3 attenuation;
         Ray scattered;
-        Material material = kls->kg.materials.ptr[hit.material_index];
+        Material material = kls->kg.materials[hit.material_index];
         if (material.scatter(&kls->rnd, ray, hit, &attenuation, &scattered)) {
             ray = scattered;
             final_color = final_color * attenuation;

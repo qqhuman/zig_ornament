@@ -27,14 +27,14 @@
 #include "ray.hip.h"
 
 
-HOST_DEVICE float3 transform_point(const Array<float4x4>& transforms, uint32_t transform_id, const float3& point) {
-    float4x4 t = transforms.ptr[transform_id];
+HOST_DEVICE INLINE float3 transform_point(const Array<float4x4>& transforms, uint32_t transform_id, const float3& point) {
+    float4x4 t = transforms[transform_id];
     float4 p = t * make_float4(point.x, point.y, point.z, 1.0f);
     return make_float3(p.x, p.y, p.z);
 }
 
-HOST_DEVICE Ray transform_ray(const Array<float4x4>& transforms, uint32_t transform_id, const Ray& ray) {
-    float4x4 inversed_t = transforms.ptr[transform_id];
+HOST_DEVICE INLINE Ray transform_ray(const Array<float4x4>& transforms, uint32_t transform_id, const Ray& ray) {
+    float4x4 inversed_t = transforms[transform_id];
     
     float4 o = inversed_t * make_float4(ray.origin.x, ray.origin.y, ray.origin.z, 1.0f);
     float4 d = inversed_t * make_float4(ray.direction.x, ray.direction.y, ray.direction.z, 0.0f);
@@ -45,8 +45,8 @@ HOST_DEVICE Ray transform_ray(const Array<float4x4>& transforms, uint32_t transf
     );
 }
 
-HOST_DEVICE float3 transform_normal(const Array<float4x4>& transforms, uint32_t transform_id, const float3& normal) {
-    float4x4 inversed_t = transforms.ptr[transform_id];
+HOST_DEVICE INLINE float3 transform_normal(const Array<float4x4>& transforms, uint32_t transform_id, const float3& normal) {
+    float4x4 inversed_t = transforms[transform_id];
     float4 n = transpose(inversed_t) * make_float4(normal.x, normal.y, normal.z, 0.0f);
     return make_float3(n.x, n.y, n.z);
 }
