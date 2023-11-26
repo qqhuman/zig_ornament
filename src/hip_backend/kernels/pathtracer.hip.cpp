@@ -73,7 +73,7 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
     float v = ((float)kls->xy.y + kls->rnd.gen_float()) / (constant_params.height - 1);
 
     Ray ray = camera.get_ray(&kls->rnd, u, v);
-    float3 final_color = make_float3(1.0f, 1.0f, 1.0f);
+    float3 final_color = make_float3(1.0f);
 
     for (int i = 0; i < constant_params.depth; i += 1) {
         float t;
@@ -86,8 +86,8 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
         if (!bvh_hit(ray, &t, &material_index, &bvh_node_type, &inverted_transform_id, &tri_id, &uv)) {
             float3 unit_direction = normalize(ray.direction);
             float tt = 0.5f * (unit_direction.y + 1.0f);
-            final_color = final_color * ((1.0f - tt) * make_float3(1.0f, 1.0f, 1.0f) + tt * make_float3(0.5f, 0.7f, 1.0f));
-            //final_color = make_float3(0.0f, 0.0f, 0.0f);
+            final_color = final_color * ((1.0f - tt) * make_float3(1.0f) + tt * make_float3(0.5f, 0.7f, 1.0f));
+            //final_color = make_float3(0.0f);
             break;
         }
 
@@ -100,7 +100,7 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
         {
             case Sphere: 
             {
-                float3 center = transform_point(kls->kg.transforms, transform_id, make_float3(0.0f, 0.0f, 0.0f));
+                float3 center = transform_point(kls->kg.transforms, transform_id, make_float3(0.0f));
                 float3 outward_normal = normalize(hit.p - center);
                 float theta = acos(-outward_normal.y);
                 float phi = atan2(-outward_normal.z, outward_normal.x) + HIP_PI_F;
@@ -124,7 +124,7 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
                 float3 outward_normal = normalize(transform_normal(
                     kls->kg.transforms,
                     inverted_transform_id, 
-                    make_float3(normal.x, normal.y, normal.z)
+                    make_float3(normal)
                 ));
                 hit.set_face_normal(ray, outward_normal);
                 break;
@@ -146,7 +146,7 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
         }
     }
     
-    float4 accumulated_rgba = make_float4(final_color.x, final_color.y, final_color.z, 1.0f);
+    float4 accumulated_rgba = make_float4(final_color, 1.0f);
     if (constant_params.current_iteration > 1.0f) {
         accumulated_rgba = kls->kg.accumulation_buffer[kls->global_invocation_id] + accumulated_rgba;
     }

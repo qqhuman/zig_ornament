@@ -57,7 +57,7 @@ struct Material
     }
 
     HOST_DEVICE bool dielectric_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered) {
-        *attenuation = make_float3(1.0f, 1.0f, 1.0f);
+        *attenuation = make_float3(1.0f);
         float refraction_ratio = ior;
         if (hit.front_face) {
             refraction_ratio = 1.0f / ior;
@@ -89,7 +89,7 @@ struct Material
         switch(material_type) 
         {
             case DiffuseLight: return get_color(albedo_vec, albedo_texture_index, hit.uv);
-            default: return make_float3(0.0f, 0.0f, 0.0f);
+            default: return make_float3(0.0f);
         }
     }
 };
