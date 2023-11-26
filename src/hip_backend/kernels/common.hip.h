@@ -19,3 +19,7 @@
 #else
 #define INLINE inline
 #endif
+
+#include <hiprt/hiprt_vec.h>
+
+typedef float3 float3_aligned __attribute__((aligned(16)));

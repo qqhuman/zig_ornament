@@ -10,11 +10,6 @@ const util = @import("../util.zig");
 const Bvh = @import("../bvh.zig").Bvh;
 const gpu_structs = @import("../gpu_structs.zig");
 
-const KernalBuffer = extern struct {
-    buffer: hip.c.hipDeviceptr_t,
-    length: u32,
-};
-
 pub const PathTracer = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
@@ -136,16 +131,6 @@ pub const PathTracer = struct {
             try self.update();
             try self.launchKernal(self.path_tracing_and_post_processing_kernal);
         }
-    }
-
-    fn hipModuleGetGlobal(comptime global_mem_name: [:0]const u8, comptime T: type, module: hip.c.hipModule_t) !hip.c.hipDeviceptr_t {
-        var global_mem: hip.c.hipDeviceptr_t = undefined;
-        var global_mem_bytes: usize = undefined;
-
-        try hip.checkError(hip.c.hipModuleGetGlobal(&global_mem, &global_mem_bytes, module, global_mem_name));
-        if (@sizeOf(T) != global_mem_bytes) @panic(global_mem_name ++ " has wrong size.");
-
-        return global_mem;
     }
 
     fn printDevices(device_count: c_int) !void {

@@ -7,12 +7,12 @@
 
 struct Camera
 {
-    float3 origin __attribute__((aligned(16)));
-    float3 lower_left_corner __attribute__((aligned(16)));
-    float3 horizontal __attribute__((aligned(16)));
-    float3 vertical __attribute__((aligned(16)));
-    float3 u __attribute__((aligned(16)));
-    float3 v __attribute__((aligned(16)));
+    float3_aligned origin;
+    float3_aligned lower_left_corner;
+    float3_aligned horizontal;
+    float3_aligned vertical;
+    float3_aligned u;
+    float3_aligned v;
     float3 w;
     float lens_radius;
 
