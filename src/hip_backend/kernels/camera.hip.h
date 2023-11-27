@@ -22,7 +22,8 @@ struct Camera
     float3 w;
     float lens_radius;
 
-    HOST_DEVICE INLINE Ray get_ray(RndGen* rnd, float s, float t) {
+    HOST_DEVICE INLINE Ray get_ray(RndGen* rnd, float s, float t)
+    {
         float3 rd = lens_radius * rnd->gen_in_unit_disk();
         float3 offset = u * rd.x + v * rd.y;
         return Ray(

@@ -26,22 +26,26 @@ struct Material
     #define EPS 1E-8f
     #define NEAR_ZERO(e) abs(e.x) < EPS && abs(e.y) < EPS && abs(e.z) < EPS
 
-    HOST_DEVICE INLINE float3 get_color(const float3& color, uint32_t texture_id, const float2& uv) {
+    HOST_DEVICE INLINE float3 get_color(const float3& color, uint32_t texture_id, const float2& uv)
+    {
         return color;
     }
 
-    HOST_DEVICE INLINE float reflectance(float cosine, float ref_idx) {
+    HOST_DEVICE INLINE float reflectance(float cosine, float ref_idx)
+    {
         // Use Schlick's approximation for reflectance.
         float r0 = (1.0f - ref_idx) / (1.0f + ref_idx);
         r0 = r0 * r0;
         return r0 + (1.0f - r0) * pow((1.0f - cosine), 5.0f);
     }
 
-    HOST_DEVICE bool lambertian_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered) {
+    HOST_DEVICE bool lambertian_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered)
+    {
         float3 scattered_direction = hit.normal + rnd->gen_unit_vector();
 
         // Catch degenerate scatter direction
-        if (NEAR_ZERO(scattered_direction)) {
+        if (NEAR_ZERO(scattered_direction))
+        {
             scattered_direction = hit.normal;
         }
 
@@ -50,17 +54,20 @@ struct Material
         return true;
     }
 
-    HOST_DEVICE bool metal_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered) {
+    HOST_DEVICE bool metal_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered)
+    {
         float3 scattered_direction = reflect(normalize(r.direction), hit.normal) + fuzz * rnd->gen_in_unit_sphere();
         *scattered = Ray(hit.p, scattered_direction);
         *attenuation = get_color(albedo_vec, albedo_texture_index, hit.uv);
         return true;
     }
 
-    HOST_DEVICE bool dielectric_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered) {
+    HOST_DEVICE bool dielectric_scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered)
+    {
         *attenuation = make_float3(1.0f);
         float refraction_ratio = ior;
-        if (hit.front_face) {
+        if (hit.front_face)
+        {
             refraction_ratio = 1.0f / ior;
         }
 
@@ -76,7 +83,8 @@ struct Material
         return true;
     }
 
-    HOST_DEVICE bool scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered) {
+    HOST_DEVICE bool scatter(RndGen* rnd, const Ray& r, const HitRecord& hit, float3* attenuation, Ray* scattered)
+    {
         switch(material_type) 
         {
             case Lambertian: return lambertian_scatter(rnd, r, hit, attenuation, scattered);
@@ -86,7 +94,8 @@ struct Material
         }
     }
 
-    HOST_DEVICE float3 emit(const HitRecord& hit) {
+    HOST_DEVICE float3 emit(const HitRecord& hit)
+    {
         switch(material_type) 
         {
             case DiffuseLight: return get_color(albedo_vec, albedo_texture_index, hit.uv);

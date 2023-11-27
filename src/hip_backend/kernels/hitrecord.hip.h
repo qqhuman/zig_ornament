@@ -14,11 +14,15 @@ struct HitRecord
     float2 uv;
     bool front_face;
 
-    HOST_DEVICE void set_face_normal(const Ray& r, const float3& outward_normal) {
-        if (dot(r.direction, outward_normal) > 0.0f) {
+    HOST_DEVICE void set_face_normal(const Ray& r, const float3& outward_normal)
+    {
+        if (dot(r.direction, outward_normal) > 0.0f)
+        {
             normal = -outward_normal;
             front_face = false;
-        } else {
+        } 
+        else
+        {
             normal = outward_normal;
             front_face = true;
         }

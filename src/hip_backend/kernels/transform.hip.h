@@ -6,13 +6,15 @@
 #include "ray.hip.h"
 
 
-HOST_DEVICE INLINE float3 transform_point(const Array<float4x4>& transforms, uint32_t transform_id, const float3& point) {
+HOST_DEVICE INLINE float3 transform_point(const Array<float4x4>& transforms, uint32_t transform_id, const float3& point)
+{
     float4x4 t = transforms[transform_id];
     float4 p = t * make_float4(point, 1.0f);
     return make_float3(p);
 }
 
-HOST_DEVICE INLINE Ray transform_ray(const Array<float4x4>& transforms, uint32_t transform_id, const Ray& ray) {
+HOST_DEVICE INLINE Ray transform_ray(const Array<float4x4>& transforms, uint32_t transform_id, const Ray& ray)
+{
     float4x4 inversed_t = transforms[transform_id];
     
     float4 o = inversed_t * make_float4(ray.origin, 1.0f);
@@ -24,7 +26,8 @@ HOST_DEVICE INLINE Ray transform_ray(const Array<float4x4>& transforms, uint32_t
     );
 }
 
-HOST_DEVICE INLINE float3 transform_normal(const Array<float4x4>& transforms, uint32_t transform_id, const float3& normal) {
+HOST_DEVICE INLINE float3 transform_normal(const Array<float4x4>& transforms, uint32_t transform_id, const float3& normal)
+{
     float4x4 inversed_t = transforms[transform_id];
     return make_float3(transpose(inversed_t) * make_float4(normal, 0.0f));
 }

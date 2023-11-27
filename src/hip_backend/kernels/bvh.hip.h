@@ -108,7 +108,9 @@ struct Bvh
         if (t < t_min || t > t_max) 
         {
             return t_max;
-        } else {
+        } 
+        else
+        {
             *uv = make_float2(u, v);
             return t;
         }
