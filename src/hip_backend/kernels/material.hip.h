@@ -8,10 +8,10 @@
 
 enum MaterialType : uint32_t
 {
-    Lambertian,
-    Metal,
-    Dielectric,
-    DiffuseLight,
+    Lambertian = 0,
+    Metal = 1,
+    Dielectric = 2,
+    DiffuseLight = 3,
 };
 
 struct Material 
@@ -21,9 +21,10 @@ struct Material
     float fuzz;
     float ior;
     MaterialType material_type;
+    uint32_t _padding;
     
-    #define NEAR_ZERO_EPS 1E-8f
-    #define NEAR_ZERO(e) abs(e.x) < NEAR_ZERO_EPS && abs(e.y) < NEAR_ZERO_EPS && abs(e.z) < NEAR_ZERO_EPS
+    #define EPS 1E-8f
+    #define NEAR_ZERO(e) abs(e.x) < EPS && abs(e.y) < EPS && abs(e.z) < EPS
 
     HOST_DEVICE INLINE float3 get_color(const float3& color, uint32_t texture_id, const float2& uv) {
         return color;
@@ -65,7 +66,7 @@ struct Material
 
         float3 unit_direction = normalize(r.direction);
         float cos_theta = min(dot(-unit_direction, hit.normal), 1.0f);
-        float sin_theta = sqrt(1.0f - cos_theta * cos_theta);
+        float sin_theta = sqrtf(1.0f - cos_theta * cos_theta);
         bool cannot_refract = refraction_ratio * sin_theta > 1.0f;
         float3 direction = cannot_refract || reflectance(cos_theta, refraction_ratio) > rnd->gen_float()
             ? reflect(unit_direction, hit.normal)

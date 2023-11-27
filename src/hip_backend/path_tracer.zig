@@ -44,7 +44,7 @@ pub const PathTracer = struct {
 
         const state = State.init();
 
-        var bvh = try Bvh.init(allocator, &scene);
+        var bvh = try Bvh.init(allocator, &scene, true);
         defer bvh.deinit();
 
         const fileName = "./zig-out/bin/pathtracer.co";
@@ -174,38 +174,40 @@ pub const PathTracer = struct {
         const tb = try self.getOrCreateTargetBuffer();
 
         const KernalGlobals = extern struct {
+            bvh: extern struct {
+                tlas_nodes: buffers.Array(gpu_structs.BvhNode),
+                blas_nodes: buffers.Array(gpu_structs.BvhNode),
+                normals: buffers.Array(gpu_structs.Normal),
+                normal_indices: buffers.Array(u32),
+                uvs: buffers.Array(gpu_structs.Uv),
+                uv_indices: buffers.Array(u32),
+                transforms: buffers.Array(gpu_structs.Transform),
+            },
+            materials: buffers.Array(gpu_structs.Material),
             framebuffer: hip.c.hipDeviceptr_t,
             accumulation_buffer: hip.c.hipDeviceptr_t,
             rng_seed_buffer: hip.c.hipDeviceptr_t,
             pixel_count: u32,
-
-            materials: buffers.Array(gpu_structs.Material),
-            normals: buffers.Array(gpu_structs.Normal),
-            normal_indices: buffers.Array(u32),
-            uvs: buffers.Array(gpu_structs.Uv),
-            uv_indices: buffers.Array(u32),
-            transforms: buffers.Array(gpu_structs.Transform),
-            tlas_nodes: buffers.Array(gpu_structs.BvhNode),
-            blas_nodes: buffers.Array(gpu_structs.BvhNode),
         };
 
         const KernalArgs = extern struct { kg: KernalGlobals };
 
         var args = KernalArgs{
             .kg = .{
+                .bvh = .{
+                    .tlas_nodes = self.tlas_nodes,
+                    .blas_nodes = self.blas_nodes,
+                    .normals = self.normals,
+                    .normal_indices = self.normal_indices,
+                    .uvs = self.uvs,
+                    .uv_indices = self.uv_indices,
+                    .transforms = self.transforms,
+                },
+                .materials = self.materials,
                 .framebuffer = tb.buffer,
                 .accumulation_buffer = tb.accumulation_buffer,
                 .rng_seed_buffer = tb.rng_state_buffer,
                 .pixel_count = tb.resolution.pixel_count(),
-
-                .materials = self.materials,
-                .normals = self.normals,
-                .normal_indices = self.normal_indices,
-                .uvs = self.uvs,
-                .uv_indices = self.uv_indices,
-                .transforms = self.transforms,
-                .tlas_nodes = self.tlas_nodes,
-                .blas_nodes = self.blas_nodes,
             },
         };
 

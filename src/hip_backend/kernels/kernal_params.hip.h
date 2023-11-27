@@ -6,21 +6,16 @@
 #include "material.hip.h"
 #include "random.hip.h"
 #include "array.hip.h"
+#include "bvh.hip.h"
 
 struct KernalGlobals
 {
+    Bvh bvh;
+    Array<Material> materials;
     float4* framebuffer;
     float4* accumulation_buffer;
     uint32_t* rng_seed_buffer;
     uint32_t pixel_count;
-    Array<Material> materials;
-    Array<float4> normals;
-    Array<uint32_t> normal_indices;
-    Array<float2> uvs;
-    Array<uint32_t> uv_indices;
-    Array<float4x4> transforms;
-    Array<BvhNode> tlas_nodes;
-    Array<BvhNode> blas_nodes;
 };
 
 struct KernalLocalState

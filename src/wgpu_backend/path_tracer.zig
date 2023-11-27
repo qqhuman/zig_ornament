@@ -55,7 +55,7 @@ pub const PathTracer = struct {
         );
         const camera_buffer = buffers.Uniform(gpu_structs.Camera).init(device_state.device, false, gpu_structs.Camera.from(&scene.camera));
 
-        var bvh = try Bvh.init(allocator, &scene);
+        var bvh = try Bvh.init(allocator, &scene, false);
         defer bvh.deinit();
         const textures = try buffers.Textures.init(allocator, bvh.textures.items, device_state.device, device_state.queue);
 
@@ -145,7 +145,6 @@ pub const PathTracer = struct {
             @embedFile("shaders/material.wgsl") ++ "\n" ++
             @embedFile("shaders/random.wgsl") ++ "\n" ++
             @embedFile("shaders/ray.wgsl") ++ "\n" ++
-            @embedFile("shaders/sphere.wgsl") ++ "\n" ++
             @embedFile("shaders/states.wgsl") ++ "\n" ++
             @embedFile("shaders/transform.wgsl") ++ "\n" ++
             @embedFile("shaders/utility.wgsl");

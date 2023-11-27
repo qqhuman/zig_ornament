@@ -6,8 +6,8 @@
 
 struct Ray
 {
-    float3_aligned origin;
-    float3_aligned direction;
+    float3 origin;
+    float3 direction;
 
     HOST_DEVICE Ray() : origin(make_float3(0.0f)), direction(make_float3(0.0f)) {}
     HOST_DEVICE Ray(const float3& o, const float3& d) : origin(o), direction(d) {}

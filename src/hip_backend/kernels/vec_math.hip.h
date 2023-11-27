@@ -612,6 +612,34 @@ HOST_DEVICE INLINE float3 make_float3( const float2& a, const float c ) { return
 
 HOST_DEVICE INLINE float3 make_float3( const float c ) { return make_float3( c, c, c ); }
 
+HOST_DEVICE INLINE float min( const float3& a ) 
+{ 
+	float v = RT_MIN(a.x, a.y);
+	return RT_MIN(v, a.z); 
+}
+
+HOST_DEVICE INLINE float max( const float3& a ) 
+{ 
+	float v = RT_MAX(a.x, a.y);
+	return RT_MAX(v, a.z); 
+}
+
+HOST_DEVICE INLINE float3 min( const float3& a, const float3& b ) 
+{ 
+	float x = RT_MIN( a.x, b.x );
+	float y = RT_MIN( a.y, b.y );
+	float z = RT_MIN( a.z, b.z );
+	return make_float3( x, y, z);
+}
+
+HOST_DEVICE INLINE float3 max( const float3& a, const float3& b ) 
+{ 
+	float x = RT_MAX( a.x, b.x );
+	float y = RT_MAX( a.y, b.y );
+	float z = RT_MAX( a.z, b.z );
+	return make_float3( x, y, z );
+}
+
 HOST_DEVICE INLINE float3 operator+( const float3& a, const float3& b )
 {
 	return make_float3( a.x + b.x, a.y + b.y, a.z + b.z );
@@ -724,6 +752,34 @@ HOST_DEVICE INLINE float4 make_float4( const float2& a, const float c0, const fl
 HOST_DEVICE INLINE float4 make_float4( const float3& a, const float c ) { return make_float4( a.x, a.y, a.z, c ); }
 
 HOST_DEVICE INLINE float4 make_float4( const float c ) { return make_float4( c, c, c, c ); }
+
+HOST_DEVICE INLINE float4 min( const float4& a, const float4& b ) 
+{ 
+	float x = RT_MIN( a.x, b.x );
+	float y = RT_MIN( a.y, b.y );
+	float z = RT_MIN( a.z, b.z );
+	float w = RT_MIN( a.w, b.w );
+	return make_float4( x, y, z, w );
+}
+
+HOST_DEVICE INLINE float4 max( const float4& a, const float4& b ) 
+{ 
+	float x = RT_MAX( a.x, b.x );
+	float y = RT_MAX( a.y, b.y );
+	float z = RT_MAX( a.z, b.z );
+	float w = RT_MAX( a.w, b.w );
+	return make_float4( x, y, z, w );
+}
+
+HOST_DEVICE INLINE float4 clamp( const float4& a, float minimum, float maximum )
+{
+	return make_float4(
+		max( min( a.x, maximum ), minimum ),
+		max( min( a.y, maximum ), minimum ),
+		max( min( a.z, maximum ), minimum ),
+		max( min( a.w, maximum ), minimum )
+	);
+}
 
 HOST_DEVICE INLINE float4 operator+( const float4& a, const float4& b )
 {
@@ -868,6 +924,10 @@ HOST_DEVICE INLINE float dot( const float3& a, const float3& b ) { return a.x * 
 
 HOST_DEVICE INLINE float dot( const float4& a, const float4& b ) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
 
+HOST_DEVICE INLINE float length_squared( const float3& a ) { return a.x * a.x + a.y * a.y + a.z * a.z; }
+
+HOST_DEVICE INLINE float length( const float3& a ) { return sqrtf(length_squared(a)); }
+
 HOST_DEVICE INLINE float3 normalize( const float3& a ) { return a / sqrtf( dot( a, a ) ); }
 
 HOST_DEVICE INLINE float3 reflect( const float3& e1, const float3& e2 ) { return e1 - 2.0f * dot(e2, e1) * e2; }
@@ -875,12 +935,29 @@ HOST_DEVICE INLINE float3 reflect( const float3& e1, const float3& e2 ) { return
 HOST_DEVICE INLINE float3 refract( const float3& i, const float3& n, float eta ) 
 {
 	float k = 1.0f - eta * eta * (1.0f - dot(n, i) * dot(n, i));
-	return k < 0.0f ? make_float3(0.0f, 0.0f, 0.0f) : eta * i - (eta * dot(n, i) + sqrt(k)) * n;
+	return k < 0.0f ? make_float3(0.0f) : eta * i - (eta * dot(n, i) + sqrtf(k)) * n;
 }
 
 HOST_DEVICE INLINE float4 operator*( const float4x4& m, const float4& v )
 {
+	// ROW MAJOR
 	return make_float4( dot( m.r[0], v ), dot( m.r[1], v ), dot( m.r[2], v ), dot( m.r[3], v ) );
+	
+	// ROW MAJOR
+	// return make_float4( 
+	// 	v.x * m.e[0][0] + v.y * m.e[0][1] + v.z * m.e[0][2] + v.w * m.e[0][3], 
+	// 	v.x * m.e[1][0] + v.y * m.e[1][1] + v.z * m.e[1][2] + v.w * m.e[1][3], 
+	// 	v.x * m.e[2][0] + v.y * m.e[2][1] + v.z * m.e[2][2] + v.w * m.e[2][3], 
+	// 	v.x * m.e[3][0] + v.y * m.e[3][1] + v.z * m.e[3][2] + v.w * m.e[3][3] 
+	// );
+
+	// COLUMN MAJOR
+	// return make_float4( 
+	// 	v.x * m.e[0][0] + v.y * m.e[1][0] + v.z * m.e[2][0] + v.w * m.e[3][0], 
+	// 	v.x * m.e[0][1] + v.y * m.e[1][1] + v.z * m.e[2][1] + v.w * m.e[3][1], 
+	// 	v.x * m.e[0][2] + v.y * m.e[1][2] + v.z * m.e[2][2] + v.w * m.e[3][2], 
+	// 	v.x * m.e[0][3] + v.y * m.e[1][3] + v.z * m.e[2][3] + v.w * m.e[3][3] 
+	// );
 }
 
 HOST_DEVICE INLINE float4x4 operator*( const float4x4& a, const float4x4& b )

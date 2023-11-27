@@ -82,7 +82,7 @@ struct RndGen
         // https://stats.stackexchange.com/a/481559
 
         // r^2 is distributed as U(0, 1).
-        float r = sqrt(gen_float());
+        float r = sqrtf(gen_float());
         float alpha = 2.0f * HIP_PI_F * gen_float();
 
         float x = r * cos(alpha);

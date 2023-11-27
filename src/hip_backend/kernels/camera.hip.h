@@ -7,12 +7,18 @@
 
 struct Camera
 {
-    float3_aligned origin;
-    float3_aligned lower_left_corner;
-    float3_aligned horizontal;
-    float3_aligned vertical;
-    float3_aligned u;
-    float3_aligned v;
+    float3 origin;
+    uint32_t _padding0;
+    float3 lower_left_corner;
+    uint32_t _padding1;
+    float3 horizontal;
+    uint32_t _padding2;
+    float3 vertical;
+    uint32_t _padding3;
+    float3 u;
+    uint32_t _padding4;
+    float3 v;
+    uint32_t _padding5;
     float3 w;
     float lens_radius;
 

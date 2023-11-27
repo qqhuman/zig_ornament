@@ -28,8 +28,9 @@ pub const Bvh = struct {
     transforms: std.ArrayList(gpu_structs.Transform),
     materials: std.ArrayList(gpu_structs.Material),
     textures: std.ArrayList(*ornament.Texture),
+    row_major_transforms: bool,
 
-    pub fn init(allocator: std.mem.Allocator, scene: *const ornament.Scene) std.mem.Allocator.Error!Self {
+    pub fn init(allocator: std.mem.Allocator, scene: *const ornament.Scene, row_major_transforms: bool) std.mem.Allocator.Error!Self {
         const shapes_count = scene.spheres.items.len + scene.meshes.items.len + scene.mesh_instances.items.len;
         if (shapes_count == 0) {
             @panic("[ornament] scene cannot be empty.");
@@ -58,6 +59,7 @@ pub const Bvh = struct {
             .transforms = try std.ArrayList(gpu_structs.Transform).initCapacity(allocator, shapes_count),
             .materials = std.ArrayList(gpu_structs.Material).init(allocator),
             .textures = std.ArrayList(*ornament.Texture).init(allocator),
+            .row_major_transforms = row_major_transforms,
         };
         std.log.debug("[ornament] bvh building.", .{});
         try build(allocator, &self, scene);
@@ -367,7 +369,8 @@ fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf)
 }
 
 fn appendTransform(bvh: *Bvh, transform: zmath.Mat) !void {
-    try bvh.transforms.append(zmath.matToArr(transform));
+    const t = if (bvh.row_major_transforms) zmath.transpose(transform) else transform;
+    try bvh.transforms.append(zmath.matToArr(t));
 }
 
 fn getMaterialIndex(bvh: *Bvh, material: *Material) std.mem.Allocator.Error!u32 {
