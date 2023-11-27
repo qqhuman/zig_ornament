@@ -65,7 +65,7 @@ pub const Scene = struct {
         var material = try self.allocator.create(Material);
         material.* = Material{
             .albedo = albedo,
-            .materia_type = 0,
+            .materia_type = .Lambertian,
 
             .fuzz = undefined,
             .ior = undefined,
@@ -80,7 +80,7 @@ pub const Scene = struct {
         material.* = Material{
             .albedo = albedo,
             .fuzz = fuzz,
-            .materia_type = 1,
+            .materia_type = .Metal,
 
             .ior = undefined,
             .material_index = null,
@@ -93,7 +93,7 @@ pub const Scene = struct {
         var material = try self.allocator.create(Material);
         material.* = Material{
             .ior = ior,
-            .materia_type = 2,
+            .materia_type = .Dielectric,
 
             .albedo = undefined,
             .fuzz = undefined,
@@ -107,7 +107,7 @@ pub const Scene = struct {
         return self.addElement(
             Material{
                 .albedo = albedo,
-                .materia_type = 3,
+                .materia_type = .DiffuseLight,
 
                 .fuzz = undefined,
                 .ior = undefined,

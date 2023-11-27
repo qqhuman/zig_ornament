@@ -12,13 +12,20 @@ pub const Normal = [4]f32; // 4th byte is padding
 pub const Uv = [2]f32;
 pub const Transform = [16]f32;
 
+pub const BvhNodeType = enum(u32) {
+    InternalNode = 0,
+    Sphere = 1,
+    Mesh = 2,
+    Triangle = 3,
+};
+
 pub const BvhNode = extern struct {
     left_aabb_min_or_v0: [3]f32,
     left_or_custom_id: u32, // bvh node/top of mesh bvh/triangle id
     left_aabb_max_or_v1: [3]f32,
     right_or_material_index: u32,
     right_aabb_min_or_v2: [3]f32,
-    node_type: u32, // 0 internal node, 1 sphere, 2 mesh, 3 triangle
+    node_type: BvhNodeType,
     right_aabb_max_or_v3: [3]f32,
     transform_id: u32,
 };
@@ -29,7 +36,7 @@ pub const Material = extern struct {
     albedo_texture_index: u32,
     fuzz: f32,
     ior: f32,
-    materia_type: u32,
+    materia_type: ornament.MaterialType,
     _padding: u32 = undefined,
 
     pub fn from(material: *const ornament.Material) Self {

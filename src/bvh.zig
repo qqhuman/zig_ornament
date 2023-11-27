@@ -108,13 +108,6 @@ pub const Bvh = struct {
     }
 };
 
-const NodeType = enum(u32) {
-    InternalNode = 0,
-    Sphere = 1,
-    Mesh = 2,
-    Triangle = 3,
-};
-
 const Triangle = struct {
     v0: zmath.Vec,
     v1: zmath.Vec,
@@ -235,7 +228,7 @@ fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Trian
             .left_aabb_max_or_v1 = zmath.vecToArr3(t.v1),
             .right_aabb_min_or_v2 = zmath.vecToArr3(t.v2),
             .left_or_custom_id = t.triangle_index,
-            .node_type = @intFromEnum(NodeType.Triangle),
+            .node_type = gpu_structs.BvhNodeType.Triangle,
 
             .right_or_material_index = undefined,
             .right_aabb_max_or_v3 = undefined,
@@ -268,7 +261,7 @@ fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Trian
             .left_aabb_max_or_v1 = zmath.vecToArr3(left_aabb.max),
             .right_or_material_index = @as(u32, @truncate(right_id)),
             .right_aabb_min_or_v2 = zmath.vecToArr3(right_aabb.min),
-            .node_type = @intFromEnum(NodeType.InternalNode),
+            .node_type = gpu_structs.BvhNodeType.InternalNode,
             .right_aabb_max_or_v3 = zmath.vecToArr3(right_aabb.max),
 
             .transform_id = undefined,
@@ -290,7 +283,7 @@ fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf)
                     .left_aabb_min_or_v0 = zmath.vecToArr3(s.aabb.min),
                     .left_aabb_max_or_v1 = zmath.vecToArr3(s.aabb.max),
                     .right_or_material_index = try getMaterialIndex(bvh, s.material),
-                    .node_type = @intFromEnum(NodeType.Sphere),
+                    .node_type = gpu_structs.BvhNodeType.Sphere,
                     .transform_id = @as(u32, @truncate(transform_id)),
 
                     .left_or_custom_id = undefined,
@@ -308,7 +301,7 @@ fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf)
                     .left_aabb_max_or_v1 = zmath.vecToArr3(m.aabb.max),
                     .left_or_custom_id = m.bvh_id orelse unreachable,
                     .right_or_material_index = try getMaterialIndex(bvh, m.material),
-                    .node_type = @intFromEnum(NodeType.Mesh),
+                    .node_type = gpu_structs.BvhNodeType.Mesh,
                     .transform_id = @as(u32, @truncate(transform_id)),
 
                     .right_aabb_min_or_v2 = undefined,
@@ -324,7 +317,7 @@ fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf)
                     .left_aabb_min_or_v0 = zmath.vecToArr3(mi.aabb.min),
                     .left_aabb_max_or_v1 = zmath.vecToArr3(mi.aabb.max),
                     .right_or_material_index = try getMaterialIndex(bvh, mi.material),
-                    .node_type = @intFromEnum(NodeType.Mesh),
+                    .node_type = gpu_structs.BvhNodeType.Mesh,
                     .transform_id = @as(u32, @truncate(transform_id)),
                     .left_or_custom_id = mi.mesh.bvh_id orelse unreachable,
 
@@ -360,7 +353,7 @@ fn buildBvhTlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Leaf)
             .left_aabb_max_or_v1 = zmath.vecToArr3(left_aabb.max),
             .right_or_material_index = @as(u32, @truncate(right_id)),
             .right_aabb_min_or_v2 = zmath.vecToArr3(right_aabb.min),
-            .node_type = @intFromEnum(NodeType.InternalNode),
+            .node_type = gpu_structs.BvhNodeType.InternalNode,
             .right_aabb_max_or_v3 = zmath.vecToArr3(right_aabb.max),
 
             .transform_id = undefined,

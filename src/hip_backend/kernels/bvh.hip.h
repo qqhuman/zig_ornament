@@ -10,7 +10,7 @@
 
 enum BvhNodeType : uint32_t
 {
-    IndernalNode = 0,
+    InternalNode = 0,
     Sphere = 1,
     Mesh = 2,
     Triangle = 3,
@@ -177,7 +177,7 @@ struct Bvh
             BvhNode node = traverse_tlas ? tlas_nodes[addr] : blas_nodes[addr];
             switch (node.node_type)
             {
-                case IndernalNode: 
+                case InternalNode: 
                 {
                     float2 left = aabb_hit(node.left_aabb_min_or_v0, node.left_aabb_max_or_v1, invdir, oxinvdir, t_min, t_max);
                     float2 right = aabb_hit(node.right_aabb_min_or_v2, node.right_aabb_max_or_v3, invdir, oxinvdir, t_min, t_max);
