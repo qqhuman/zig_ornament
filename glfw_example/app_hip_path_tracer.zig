@@ -25,7 +25,7 @@ const App = struct {
     path_tracer: ornament.HipPathTracer,
     wgpu_device_state: ornament.wgpu_backend.DeviceState,
     viewport: ?Viewport,
-    frame_buffer: [][4]f32,
+    frame_buffer: ?[][4]f32,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_wgpu] init", .{});
@@ -71,7 +71,7 @@ const App = struct {
 
     pub fn deinit(self: *Self) !void {
         std.log.debug("[glfw_wgpu] deinit", .{});
-        self.allocator.free(self.frame_buffer);
+        if (self.frame_buffer) |fb| self.allocator.free(fb);
         if (self.viewport) |*v| v.deinit();
         self.wgpu_device_state.deinit();
         try self.path_tracer.deinit();
@@ -95,8 +95,10 @@ const App = struct {
             self.path_tracer.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
             self.path_tracer.setResolution(new_resolution) catch unreachable;
 
-            self.allocator.free(self.frame_buffer);
-            self.frame_buffer = self.allocator.alloc([4]f32, new_resolution.pixel_count()) catch unreachable;
+            if (self.frame_buffer) |fb| {
+                self.allocator.free(fb);
+                self.frame_buffer = null;
+            }
 
             if (self.viewport) |*v| {
                 v.deinit();
@@ -159,9 +161,15 @@ const App = struct {
                 self.viewport = try Viewport.init(&self.wgpu_device_state, self.resolution, null);
                 std.log.debug("[glfw_wgpu] viewport was created", .{});
             }
+
+            if (self.frame_buffer == null) {
+                self.frame_buffer = try self.allocator.alloc([4]f32, self.resolution.pixel_count());
+                std.log.debug("[glfw_wgpu] getOrCreateTargetBuffer width = {d}, height = {d}", .{ self.resolution.width, self.resolution.height });
+            }
+
             try self.path_tracer.render();
-            try self.path_tracer.getFrameBuffer(self.frame_buffer);
-            try self.viewport.?.renderFrameBuffer(self.frame_buffer);
+            try self.path_tracer.getFrameBuffer(self.frame_buffer.?);
+            try self.viewport.?.renderFrameBuffer(self.frame_buffer.?);
             fps_counter.endFrames(app_config.ITERATIONS);
         }
     }

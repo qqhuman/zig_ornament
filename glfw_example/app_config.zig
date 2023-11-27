@@ -1,6 +1,6 @@
 const zmath = @import("zmath");
 
-pub const WIDTH = 1000;
+pub const WIDTH = 2000;
 pub const HEIGHT = 1000;
 pub const DEPTH = 10;
 pub const ITERATIONS = 1;

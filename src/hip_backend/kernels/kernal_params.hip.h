@@ -26,7 +26,7 @@ struct KernalLocalState
     RndGen rnd;
 
     HOST_DEVICE KernalLocalState(const KernalGlobals& kg, uint2 resolution, uint32_t global_invocation_id) : kg(kg),
-        xy(make_uint2(global_invocation_id % resolution.x, global_invocation_id / resolution.y)),
+        xy(make_uint2(global_invocation_id % resolution.x, global_invocation_id / resolution.x)),
         global_invocation_id(global_invocation_id), 
         rnd(kg.rng_seed_buffer[global_invocation_id])
     {}
