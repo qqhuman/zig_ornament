@@ -15,7 +15,6 @@ pub const PathTracer = struct {
     allocator: std.mem.Allocator,
     scene: Scene,
     state: State,
-    resolution: util.Resolution,
 
     module: hip.c.hipModule_t,
     path_tracing_and_post_processing_kernal: hip.c.hipFunction_t,
@@ -64,7 +63,6 @@ pub const PathTracer = struct {
             .allocator = allocator,
             .scene = scene,
             .state = state,
-            .resolution = state.getResolution(),
 
             .module = module,
             .path_tracing_and_post_processing_kernal = path_tracing_and_post_processing_kernal,
@@ -101,7 +99,6 @@ pub const PathTracer = struct {
     }
 
     pub fn setResolution(self: *Self, resolution: util.Resolution) !void {
-        self.resolution = resolution;
         self.state.setResolution(resolution);
         if (self.target_buffer) |*tb| {
             try tb.deinit();
@@ -142,7 +139,7 @@ pub const PathTracer = struct {
 
     fn getOrCreateTargetBuffer(self: *Self) !*buffers.Target {
         if (self.target_buffer == null) {
-            self.target_buffer = try buffers.Target.init(self.allocator, self.resolution);
+            self.target_buffer = try buffers.Target.init(self.allocator, self.state.getResolution());
         }
 
         return &self.target_buffer.?;
@@ -154,11 +151,6 @@ pub const PathTracer = struct {
             dirty = true;
             self.scene.camera.dirty = false;
             try buffers.globalCopyHToD(gpu_structs.Camera, self.camera, gpu_structs.Camera.from(&self.scene.camera));
-        }
-
-        if (self.state.dirty) {
-            dirty = true;
-            self.state.dirty = false;
         }
 
         if (dirty) self.state.reset();

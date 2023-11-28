@@ -12,20 +12,18 @@ pub fn run() !void {
     defer if (gpa.deinit() == .leak) @panic("[glfw_wgpu] memory leak");
 
     var app = try App.init(gpa.allocator());
+    defer app.deinit();
     app.setUpCallbacks();
     try app.renderLoop();
-    try app.deinit();
 }
 
 const App = struct {
     const Self = @This();
     allocator: std.mem.Allocator,
     window: *zglfw.Window,
-    resolution: ornament.Resolution,
-    path_tracer: ornament.HipPathTracer,
-    wgpu_device_state: ornament.wgpu_backend.DeviceState,
-    viewport: ?Viewport,
-    frame_buffer: ?[][4]f32,
+    path_tracer: ornament.WgpuPathTracer,
+    viewport: Viewport,
+    recreate_viewport: bool = false,
 
     pub fn init(allocator: std.mem.Allocator) !Self {
         std.log.debug("[glfw_wgpu] init", .{});
@@ -36,45 +34,37 @@ const App = struct {
         zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
         const window = try zglfw.Window.create(app_config.WIDTH, app_config.HEIGHT, app_config.TITLE, null);
 
+        var surface_descriptor_from_windows = ornament.wgpu_backend.webgpu.SurfaceDescriptorFromWindowsHWND{
+            .chain = .{ .next = null, .struct_type = .surface_descriptor_from_windows_hwnd },
+            .hwnd = try zglfw.native.getWin32Window(window),
+            .hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable,
+        };
         var scene = ornament.Scene.init(allocator);
         try @import("examples.zig").init_spheres(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
-        var path_tracer = try ornament.HipPathTracer.init(allocator, scene);
-
+        var path_tracer = try ornament.WgpuPathTracer.init(
+            allocator,
+            scene,
+            .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
+        );
         path_tracer.state.setGamma(app_config.GAMMA);
         path_tracer.state.setFlipY(app_config.FLIP_Y);
         path_tracer.state.setDepth(app_config.DEPTH);
         path_tracer.state.setIterations(app_config.ITERATIONS);
         try path_tracer.setResolution(ornament.Resolution{ .width = app_config.WIDTH, .height = app_config.HEIGHT });
 
-        var surface_descriptor_from_windows = ornament.wgpu_backend.webgpu.SurfaceDescriptorFromWindowsHWND{
-            .chain = .{ .next = null, .struct_type = .surface_descriptor_from_windows_hwnd },
-            .hwnd = try zglfw.native.getWin32Window(window),
-            .hinstance = std.os.windows.kernel32.GetModuleHandleW(null) orelse unreachable,
-        };
-        const wgpu_device_state = try ornament.wgpu_backend.DeviceState.init(
-            allocator,
-            &.{},
-            .{ .next_in_chain = @ptrCast(&surface_descriptor_from_windows) },
-        );
-
-        const viewport = try Viewport.init(&wgpu_device_state, path_tracer.state.resolution, null);
+        const target_buffer = try path_tracer.getOrCreateTargetBuffer();
         return .{
             .allocator = allocator,
             .window = window,
-            .resolution = path_tracer.state.resolution,
             .path_tracer = path_tracer,
-            .wgpu_device_state = wgpu_device_state,
-            .viewport = viewport,
-            .frame_buffer = try allocator.alloc([4]f32, path_tracer.state.resolution.pixel_count()),
+            .viewport = try Viewport.init(&path_tracer.device_state, path_tracer.state.getResolution(), &target_buffer.buffer),
         };
     }
 
-    pub fn deinit(self: *Self) !void {
+    pub fn deinit(self: *Self) void {
         std.log.debug("[glfw_wgpu] deinit", .{});
-        if (self.frame_buffer) |fb| self.allocator.free(fb);
-        if (self.viewport) |*v| v.deinit();
-        self.wgpu_device_state.deinit();
-        try self.path_tracer.deinit();
+        self.viewport.deinit();
+        self.path_tracer.deinit();
         self.window.destroy();
         zglfw.terminate();
         zstbi.deinit();
@@ -89,21 +79,11 @@ const App = struct {
     fn onFramebufferSize(window: *zglfw.Window, width: i32, height: i32) callconv(.C) void {
         var self: *Self = window.getUserPointer(Self) orelse unreachable;
         const new_resolution = ornament.Resolution{ .width = @intCast(width), .height = @intCast(height) };
-        if (!std.meta.eql(self.resolution, new_resolution)) {
+        if (!std.meta.eql(self.path_tracer.state.getResolution(), new_resolution)) {
             std.log.debug("[glfw_wgpu] onFramebufferSize width = {d}, height = {d}", .{ width, height });
-            self.resolution = new_resolution;
             self.path_tracer.scene.camera.setAspectRatio(@as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)));
             self.path_tracer.setResolution(new_resolution) catch unreachable;
-
-            if (self.frame_buffer) |fb| {
-                self.allocator.free(fb);
-                self.frame_buffer = null;
-            }
-
-            if (self.viewport) |*v| {
-                v.deinit();
-                self.viewport = null;
-            }
+            self.recreate_viewport = true;
         }
     }
 
@@ -157,19 +137,15 @@ const App = struct {
         while (!self.window.shouldClose() and self.window.getKey(.escape) != .press) {
             zglfw.pollEvents();
             self.update();
-            if (self.viewport == null) {
-                self.viewport = try Viewport.init(&self.wgpu_device_state, self.resolution, null);
+            try self.path_tracer.render();
+            if (self.recreate_viewport) {
+                self.recreate_viewport = false;
+                self.viewport.deinit();
+                const target_buffer = try self.path_tracer.getOrCreateTargetBuffer();
+                self.viewport = try Viewport.init(&self.path_tracer.device_state, self.path_tracer.state.getResolution(), &target_buffer.buffer);
                 std.log.debug("[glfw_wgpu] viewport was created", .{});
             }
-
-            if (self.frame_buffer == null) {
-                self.frame_buffer = try self.allocator.alloc([4]f32, self.resolution.pixel_count());
-                std.log.debug("[glfw_wgpu] getOrCreateTargetBuffer width = {d}, height = {d}", .{ self.resolution.width, self.resolution.height });
-            }
-
-            try self.path_tracer.render();
-            try self.path_tracer.getFrameBuffer(self.frame_buffer.?);
-            try self.viewport.?.renderFrameBuffer(self.frame_buffer.?);
+            try self.viewport.render();
             fps_counter.endFrames(app_config.ITERATIONS);
         }
     }

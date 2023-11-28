@@ -4,6 +4,7 @@ const webgpu = @import("webgpu.zig");
 pub const WgpuError = error{
     AdapterRequestFailed,
     DeviceRequestFailed,
+    MapFailed,
 };
 
 pub const DeviceState = struct {

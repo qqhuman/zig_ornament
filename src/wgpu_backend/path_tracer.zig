@@ -16,7 +16,6 @@ pub const PathTracer = struct {
     allocator: std.mem.Allocator,
     scene: Scene,
     state: State,
-    resolution: util.Resolution,
 
     device_state: DeviceState,
     shader_module: webgpu.ShaderModule,
@@ -90,7 +89,6 @@ pub const PathTracer = struct {
             .allocator = allocator,
             .scene = scene,
             .state = state,
-            .resolution = state.getResolution(),
 
             .device_state = device_state,
             .shader_module = createShaderModule(device_state.device),
@@ -164,9 +162,14 @@ pub const PathTracer = struct {
         return target.workgroups;
     }
 
+    pub fn getFrameBuffer(self: *Self, dst: []gpu_structs.Vector4) !void {
+        const tb = try self.getOrCreateTargetBuffer();
+        try tb.getFrameBuffer(self.device_state.device, self.device_state.queue, dst);
+    }
+
     pub fn getOrCreateTargetBuffer(self: *Self) !*buffers.Target {
         if (self.target_buffer == null) {
-            self.target_buffer = try buffers.Target.init(self.allocator, self.device_state.device, self.resolution);
+            self.target_buffer = try buffers.Target.init(self.allocator, self.device_state.device, self.state.resolution);
             std.log.debug("[ornament] target buffer was created", .{});
         }
 
@@ -197,16 +200,17 @@ pub const PathTracer = struct {
         return &self.pipeline.?;
     }
 
-    pub fn setResolution(self: *Self, resolution: util.Resolution) void {
-        self.resolution = resolution;
-        self.state.setResolution(resolution);
-        if (self.target_buffer) |*tb| {
-            tb.deinit();
-            self.target_buffer = null;
-        }
-        if (self.pipeline) |*p| {
-            p.deinit();
-            self.pipeline = null;
+    pub fn setResolution(self: *Self, resolution: util.Resolution) !void {
+        if (!std.meta.eql(self.state.getResolution(), resolution)) {
+            self.state.setResolution(resolution);
+            if (self.target_buffer) |*tb| {
+                tb.deinit();
+                self.target_buffer = null;
+            }
+            if (self.pipeline) |*p| {
+                p.deinit();
+                self.pipeline = null;
+            }
         }
     }
 
@@ -216,11 +220,6 @@ pub const PathTracer = struct {
             dirty = true;
             self.scene.camera.dirty = false;
             self.camera_buffer.write(self.device_state.queue, gpu_structs.Camera.from(&self.scene.camera));
-        }
-
-        if (self.state.dirty) {
-            dirty = true;
-            self.state.dirty = false;
         }
 
         if (dirty) self.state.reset();

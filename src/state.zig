@@ -8,7 +8,6 @@ pub const State = struct {
     inverted_gamma: f32,
     iterations: u32,
     ray_cast_epsilon: f32,
-    dirty: bool,
     current_iteration: f32,
 
     pub fn init() Self {
@@ -19,18 +18,12 @@ pub const State = struct {
             .inverted_gamma = 1.0,
             .iterations = 1,
             .ray_cast_epsilon = 0.001,
-            .dirty = true,
             .current_iteration = 0.0,
         };
     }
 
-    fn makeDirty(self: *Self) void {
-        self.dirty = true;
-    }
-
     pub fn setFlipY(self: *Self, flip_y: bool) void {
         self.flip_y = flip_y;
-        self.makeDirty();
     }
 
     pub fn getFlipY(self: *const Self) bool {
@@ -39,7 +32,6 @@ pub const State = struct {
 
     pub fn setGamma(self: *Self, gamma: f32) void {
         self.inverted_gamma = 1.0 / gamma;
-        self.makeDirty();
     }
 
     pub fn getGamma(self: *const Self) f32 {
@@ -48,7 +40,6 @@ pub const State = struct {
 
     pub fn setDepth(self: *Self, depth: u32) void {
         self.depth = depth;
-        self.makeDirty();
     }
 
     pub fn getDepth(self: *const Self) u32 {
@@ -57,7 +48,6 @@ pub const State = struct {
 
     pub fn setIterations(self: *Self, iterations: u32) void {
         self.iterations = iterations;
-        self.makeDirty();
     }
 
     pub fn getIterations(self: *const Self) u32 {
@@ -66,7 +56,6 @@ pub const State = struct {
 
     pub fn setResolution(self: *Self, resolution: Resolution) void {
         self.resolution = resolution;
-        self.makeDirty();
     }
 
     pub fn getResolution(self: *const Self) Resolution {
@@ -75,7 +64,6 @@ pub const State = struct {
 
     pub fn setRayCastEpsilon(self: *Self, ray_cast_epsilon: f32) void {
         self.ray_cast_epsilon = ray_cast_epsilon;
-        self.makeDirty();
     }
 
     pub fn getRayCastEpsilon(self: *const Self) f32 {

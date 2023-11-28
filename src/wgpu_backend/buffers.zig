@@ -1,8 +1,10 @@
 const std = @import("std");
 const ornament = @import("../ornament.zig");
 const webgpu = @import("webgpu.zig");
+const wgpu = @import("wgpu.zig");
 const util = @import("../util.zig");
 const gpu_structs = @import("../gpu_structs.zig");
+const WgpuError = @import("device_state.zig").WgpuError;
 
 pub const WORKGROUP_SIZE: u32 = 256;
 
@@ -11,6 +13,7 @@ pub const Target = struct {
     buffer: Storage(gpu_structs.Vector4),
     accumulation_buffer: Storage(gpu_structs.Vector4),
     rng_state_buffer: Storage(u32),
+    map_buffer: webgpu.Buffer,
     resolution: util.Resolution,
     workgroups: u32,
 
@@ -26,6 +29,12 @@ pub const Target = struct {
         }
         const rng_state_buffer = Storage(u32).init(device, false, .{ .data = rng_seed });
 
+        const map_buffer = device.createBuffer(.{
+            .label = "[ornament] []" ++ @typeName(gpu_structs.Vector4) ++ " map buffer",
+            .usage = .{ .map_read = true, .copy_dst = true },
+            .size = buffer.padded_size_in_bytes,
+        });
+
         var workgroups = pixels_count / WORKGROUP_SIZE;
         if (pixels_count % WORKGROUP_SIZE > 0) {
             workgroups += 1;
@@ -35,6 +44,7 @@ pub const Target = struct {
             .buffer = buffer,
             .accumulation_buffer = accumulation_buffer,
             .rng_state_buffer = rng_state_buffer,
+            .map_buffer = map_buffer,
             .resolution = resolution,
             .workgroups = workgroups,
         };
@@ -43,6 +53,7 @@ pub const Target = struct {
         self.buffer.deinit();
         self.accumulation_buffer.deinit();
         self.rng_state_buffer.deinit();
+        self.map_buffer.release();
     }
 
     pub fn layout(self: *const Self, binding_id: u32, visibility: webgpu.ShaderStage, read_only: bool) webgpu.BindGroupLayoutEntry {
@@ -51,6 +62,38 @@ pub const Target = struct {
 
     pub fn binding(self: *const Self, binding_id: u32) webgpu.BindGroupEntry {
         return self.buffer.binding(binding_id);
+    }
+
+    pub fn getFrameBuffer(self: *const Self, device: webgpu.Device, queue: webgpu.Queue, dst: []gpu_structs.Vector4) !void {
+        // copy to map buffer
+        {
+            const encoder = device.createCommandEncoder(.{ .label = "[ornament] copy frame buffer command encoder" });
+            defer encoder.release();
+            encoder.copyBufferToBuffer(self.buffer.handle, 0, self.map_buffer, 0, self.buffer.padded_size_in_bytes);
+
+            const command = encoder.finish(.{});
+            defer command.release();
+            queue.submit(&[_]webgpu.CommandBuffer{command});
+        }
+
+        var response = MapResponse{};
+        self.map_buffer.mapAsync(.{ .read = true }, 0, self.buffer.padded_size_in_bytes, mappedCallback, @ptrCast(&response));
+        defer self.map_buffer.unmap();
+
+        _ = wgpu.wgpuDevicePoll(device, true, null);
+        if (response.status != .success) {
+            return WgpuError.AdapterRequestFailed;
+        }
+
+        if (self.map_buffer.getConstMappedRange(gpu_structs.Vector4, 0, self.buffer.count)) |src| {
+            std.mem.copy(gpu_structs.Vector4, dst, src);
+        }
+    }
+
+    const MapResponse = struct { status: webgpu.BufferMapAsyncStatus = .unknown };
+    fn mappedCallback(status: webgpu.BufferMapAsyncStatus, userdata: ?*anyopaque) callconv(.C) void {
+        const response = @as(*MapResponse, @ptrCast(@alignCast(userdata)));
+        response.status = status;
     }
 };
 
@@ -64,6 +107,7 @@ pub fn Storage(comptime T: type) type {
     return struct {
         const Self = @This();
         handle: webgpu.Buffer,
+        count: usize,
         padded_size_in_bytes: u64,
 
         pub fn init(device: webgpu.Device, copy: bool, init_data: union(enum) { element_count: u64, data: []const T }) Self {
@@ -87,23 +131,26 @@ pub fn Storage(comptime T: type) type {
                     .size = padded_size_in_bytes,
                 }),
                 .data => |data| blk: {
+                    const mapped_at_creation = data.len > 0;
                     const handle = device.createBuffer(.{
                         .label = label,
                         .usage = usage,
-                        .mapped_at_creation = if (data.len > 0) .true else .false,
+                        .mapped_at_creation = if (mapped_at_creation) .true else .false,
                         .size = padded_size_in_bytes,
                     });
+                    defer if (mapped_at_creation) handle.unmap();
 
-                    if (handle.getMappedRange(T, 0, data.len)) |dst| {
-                        std.mem.copy(T, dst, data);
-                        handle.unmap();
+                    if (mapped_at_creation) {
+                        if (handle.getMappedRange(T, 0, data.len)) |dst| {
+                            std.mem.copy(T, dst, data);
+                        }
                     }
 
                     break :blk handle;
                 },
             };
 
-            return .{ .handle = handle, .padded_size_in_bytes = padded_size_in_bytes };
+            return .{ .handle = handle, .count = count, .padded_size_in_bytes = padded_size_in_bytes };
         }
 
         pub fn deinit(self: *Self) void {
