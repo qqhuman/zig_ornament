@@ -50,9 +50,14 @@ struct RndGen
         float theta = HIP_PI_F * gen_float();
         float phi = 2.0f * HIP_PI_F * gen_float();
 
-        float x = r * sin(theta) * cos(phi);
-        float y = r * sin(theta) * sin(phi);
-        float z = r * cos(theta);
+        float sin_theta, cos_theta;
+        sincosf(theta, &sin_theta, &cos_theta);
+        float sin_phi, cos_phi;
+        sincosf(phi, &sin_phi, &cos_phi);
+
+        float x = r * sin_theta * cos_phi;
+        float y = r * sin_theta * sin_phi;
+        float z = r * cos_theta;
 
         return make_float3(x, y, z);
     }
@@ -81,8 +86,10 @@ struct RndGen
         float r = sqrtf(gen_float());
         float alpha = 2.0f * HIP_PI_F * gen_float();
 
-        float x = r * cos(alpha);
-        float y = r * sin(alpha);
+        float sin_alpha, cos_alpha;
+        sincosf(alpha, &sin_alpha, &cos_alpha);
+        float x = r * cos_alpha;
+        float y = r * sin_alpha;
 
         return make_float3(x, y, 0.0f);
     }

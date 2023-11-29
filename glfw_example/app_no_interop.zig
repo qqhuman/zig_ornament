@@ -12,15 +12,23 @@ pub fn run() !void {
     const allocator = gpa.allocator();
     defer if (gpa.deinit() == .leak) @panic("[glfw_wgpu] memory leak");
 
+    zstbi.init(allocator);
+    defer zstbi.deinit();
+    zstbi.setFlipVerticallyOnLoad(true);
+
+    try zglfw.init();
+    defer zglfw.terminate();
+    zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
+
     var scene = ornament.Scene.init(allocator);
-    try @import("examples.zig").init_spheres(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
+    try @import("examples.zig").init_spheres_and_3_lucy(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
 
     //var path_tracer = try ornament.WgpuPathTracer.init(allocator, scene, null);
     var path_tracer = try ornament.HipPathTracer.init(allocator, scene);
     defer {
         if (@TypeOf(path_tracer) == ornament.HipPathTracer) {
-            path_tracer.deinit() catch {
-                //std.log.err("HipPathTracer returned an error on deinit: {d}", .{err});
+            path_tracer.deinit() catch |err| {
+                std.log.err("HipPathTracer returned an error on deinit: {any}", .{err});
                 @panic("HipPathTracer returned an error on deinit");
             };
         } else {
@@ -33,12 +41,10 @@ pub fn run() !void {
     path_tracer.state.setIterations(app_config.ITERATIONS);
     try path_tracer.setResolution(ornament.Resolution{ .width = app_config.WIDTH, .height = app_config.HEIGHT });
 
-    {
-        var app = try App(@TypeOf(path_tracer)).init(allocator, path_tracer);
-        app.setUpCallbacks();
-        try app.renderLoop();
-        try app.deinit();
-    }
+    var app = try App(@TypeOf(path_tracer)).init(allocator, path_tracer);
+    defer app.deinit();
+    app.setUpCallbacks();
+    try app.renderLoop();
 }
 
 fn App(comptime T: type) type {
@@ -55,11 +61,6 @@ fn App(comptime T: type) type {
 
         pub fn init(allocator: std.mem.Allocator, path_tracer: T) !Self {
             std.log.debug("[glfw_wgpu] init", .{});
-            zstbi.init(allocator);
-            zstbi.setFlipVerticallyOnLoad(true);
-            try zglfw.init();
-
-            zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
             const window = try zglfw.Window.create(
                 @as(i32, @intCast(path_tracer.state.resolution.width)),
                 @as(i32, @intCast(path_tracer.state.resolution.height)),
@@ -89,14 +90,12 @@ fn App(comptime T: type) type {
             };
         }
 
-        pub fn deinit(self: *Self) !void {
+        pub fn deinit(self: *Self) void {
             std.log.debug("[glfw_wgpu] deinit", .{});
             self.allocator.free(self.frame_buffer);
             self.viewport.deinit();
             self.wgpu_device_state.deinit();
             self.window.destroy();
-            zglfw.terminate();
-            zstbi.deinit();
         }
 
         pub fn setUpCallbacks(self: *Self) void {
