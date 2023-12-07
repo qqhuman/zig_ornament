@@ -60,6 +60,7 @@ pub const Material = extern struct {
 
 pub const ConstantParams = extern struct {
     const Self = @This();
+    camera: Camera,
     depth: u32,
     width: u32,
     height: u32,
@@ -69,8 +70,9 @@ pub const ConstantParams = extern struct {
     textures_count: u32,
     current_iteration: f32 = 0.0,
 
-    pub fn from(state: *const State, textures_count: u32) Self {
+    pub fn from(camera: *const ornament.Camera, state: *const State, textures_count: u32) Self {
         return .{
+            .camera = Camera.from(camera),
             .depth = state.depth,
             .width = state.resolution.width,
             .height = state.resolution.height,
@@ -86,19 +88,19 @@ pub const ConstantParams = extern struct {
 pub const Camera = extern struct {
     const Self = @This();
     origin: Point3,
-    _padding1: u32 = undefined,
-    lower_left_corner: Point3,
-    _padding2: u32 = undefined,
-    horizontal: Vector3,
-    _padding3: u32 = undefined,
-    vertical: Vector3,
-    _padding4: u32 = undefined,
-    u: Vector3,
-    _padding5: u32 = undefined,
-    v: Vector3,
-    _padding6: u32 = undefined,
-    w: Vector3,
     lens_radius: f32,
+    lower_left_corner: Point3,
+    _padding0: u32 = undefined,
+    horizontal: Vector3,
+    _padding1: u32 = undefined,
+    vertical: Vector3,
+    _padding2: u32 = undefined,
+    u: Vector3,
+    _padding3: u32 = undefined,
+    v: Vector3,
+    _padding4: u32 = undefined,
+    w: Vector3,
+    _padding5: u32 = undefined,
 
     pub fn from(camera: *const ornament.Camera) Self {
         return .{

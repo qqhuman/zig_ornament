@@ -73,7 +73,7 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
     float u = ((float)kls->xy.x + kls->rnd.gen_float()) / (constant_params.width - 1);
     float v = ((float)kls->xy.y + kls->rnd.gen_float()) / (constant_params.height - 1);
 
-    Ray ray = camera.get_ray(&kls->rnd, u, v);
+    Ray ray = constant_params.camera.get_ray(&kls->rnd, u, v);
     float3 final_color = make_float3(1.0f);
 
     for (int i = 0; i < constant_params.depth; i += 1)

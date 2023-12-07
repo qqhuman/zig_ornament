@@ -3,7 +3,6 @@
 @group(0) @binding(2) var<storage, read_write> rng_state_buffer: array<u32>;
 
 @group(1) @binding(0) var<uniform> constant_params: ConstantParams;
-@group(1) @binding(1) var<uniform> camera: Camera;
 
 @group(2) @binding(0) var<storage, read> materials: array<Material>;
 @group(2) @binding(1) var<storage, read> normals: array<vec3<f32>>;

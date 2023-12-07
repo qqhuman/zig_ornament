@@ -1,7 +1,10 @@
 #pragma once
 
+#include "camera.hip.h"
+
 struct ConstantParams
 {
+    Camera camera;
     uint32_t depth;
     uint32_t width;
     uint32_t height;

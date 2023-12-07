@@ -32,7 +32,6 @@ pub const PathTracer = struct {
     tlas_nodes: buffers.Array(gpu_structs.BvhNode),
     blas_nodes: buffers.Array(gpu_structs.BvhNode),
 
-    camera: buffers.Global(gpu_structs.Camera),
     constant_params: buffers.Global(gpu_structs.ConstantParams),
 
     pub fn init(allocator: std.mem.Allocator, scene: Scene) !Self {
@@ -79,7 +78,6 @@ pub const PathTracer = struct {
             .tlas_nodes = try buffers.Array(gpu_structs.BvhNode).init(bvh.tlas_nodes.items),
             .blas_nodes = try buffers.Array(gpu_structs.BvhNode).init(bvh.blas_nodes.items),
 
-            .camera = try buffers.Global(gpu_structs.Camera).init("camera", module),
             .constant_params = try buffers.Global(gpu_structs.ConstantParams).init("constant_params", module),
         };
     }
@@ -150,7 +148,6 @@ pub const PathTracer = struct {
         if (self.scene.camera.dirty) {
             dirty = true;
             self.scene.camera.dirty = false;
-            try buffers.globalCopyHToD(gpu_structs.Camera, self.camera, gpu_structs.Camera.from(&self.scene.camera));
         }
 
         if (dirty) self.state.reset();
@@ -158,7 +155,11 @@ pub const PathTracer = struct {
         try buffers.globalCopyHToD(
             gpu_structs.ConstantParams,
             self.constant_params,
-            gpu_structs.ConstantParams.from(&self.state, @truncate(self.scene.textures.items.len)),
+            gpu_structs.ConstantParams.from(
+                &self.scene.camera,
+                &self.state,
+                @truncate(self.scene.textures.items.len),
+            ),
         );
     }
 

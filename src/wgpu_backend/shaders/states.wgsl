@@ -1,5 +1,6 @@
 struct ConstantParams {
-    depth : u32,
+    camera: Camera,
+    depth: u32,
     width: u32,
     height: u32,
     flip_y: u32,
