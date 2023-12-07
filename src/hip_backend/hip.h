@@ -76,6 +76,5 @@ typedef struct hipDevicePropWithoutArchFlags_t {
 } hipDevicePropWithoutArchFlags_t;
 
 hipError_t hipGetDevicePropertiesWithoutArchFlags(hipDevicePropWithoutArchFlags_t* prop, int deviceId);
-void matrixTransposeExample(void);
 
 #endif

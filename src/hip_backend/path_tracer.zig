@@ -1,6 +1,5 @@
 const std = @import("std");
 const hip = @import("hip.zig");
-pub const matrix_transpose_example = hip.matrixTransposeExample;
 
 const buffers = @import("buffers.zig");
 const ornament = @import("../ornament.zig");

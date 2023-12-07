@@ -72,7 +72,6 @@ pub const Package = struct {
         exe.defineCMacro("__HIP_PLATFORM_AMD__", null);
         exe.addIncludePath(std.Build.LazyPath.relative("src/hip_backend"));
         exe.addCSourceFile(.{ .file = .{ .path = "src/hip_backend/hip.c" }, .flags = &.{""} });
-        exe.addCSourceFile(.{ .file = .{ .path = "src/hip_backend/hip_matrix_transpose_example.cpp" }, .flags = &.{""} });
 
         exe.step.dependOn(self.dep_steps);
         exe.addModule("ornament", self.ornament);

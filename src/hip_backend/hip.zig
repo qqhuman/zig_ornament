@@ -4,12 +4,6 @@ pub const c = @cImport({
     @cInclude("hip/hip_runtime.h");
 });
 
-pub fn matrixTransposeExample() void {
-    std.log.debug("", .{});
-    std.log.debug("[ornament] AMD ROCm HIP matrix transpose example", .{});
-    c.matrixTransposeExample();
-}
-
 const CuintHipError = enum(c_uint) {
     hipSuccess = 0,
     hipErrorInvalidValue = 1,
