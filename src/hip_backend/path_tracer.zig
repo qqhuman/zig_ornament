@@ -21,7 +21,7 @@ pub const PathTracer = struct {
     post_processing_kernal: hip.c.hipFunction_t,
 
     target_buffer: ?buffers.Target,
-    //textures: buffers.Textures,
+    textures: buffers.Textures,
     materials: buffers.Array(gpu_structs.Material),
     normals: buffers.Array(gpu_structs.Normal),
     normal_indices: buffers.Array(u32),
@@ -36,8 +36,9 @@ pub const PathTracer = struct {
     pub fn init(allocator: std.mem.Allocator, scene: Scene) !Self {
         var device_count: c_int = 0;
         try hip.checkError(hip.c.hipGetDeviceCount(&device_count));
-        try hip.checkError(hip.c.hipSetDevice(device_count - 1));
         try printDevices(device_count);
+        const wanted_device_id = device_count - 1;
+        try hip.checkError(hip.c.hipSetDevice(wanted_device_id));
 
         const state = State.init();
 
@@ -57,6 +58,8 @@ pub const PathTracer = struct {
         var post_processing_kernal: hip.c.hipFunction_t = undefined;
         try hip.checkError(hip.c.hipModuleGetFunction(&post_processing_kernal, module, "post_processing_kernal"));
 
+        var device_prop: hip.c.hipDevicePropWithoutArchFlags_t = undefined;
+        try hip.checkError(hip.c.hipGetDevicePropertiesWithoutArchFlags(&device_prop, wanted_device_id));
         return .{
             .allocator = allocator,
             .scene = scene,
@@ -68,6 +71,7 @@ pub const PathTracer = struct {
             .post_processing_kernal = post_processing_kernal,
 
             .target_buffer = null,
+            .textures = try buffers.Textures.init(allocator, bvh.textures.items, device_prop.texturePitchAlignment),
             .materials = try buffers.Array(gpu_structs.Material).init(bvh.materials.items),
             .normals = try buffers.Array(gpu_structs.Normal).init(bvh.normals.items),
             .normal_indices = try buffers.Array(u32).init(bvh.normal_indices.items),
@@ -83,6 +87,7 @@ pub const PathTracer = struct {
 
     pub fn deinit(self: *Self) !void {
         try hip.checkError(hip.c.hipModuleUnload(self.module));
+        try self.textures.deinit();
         try self.materials.deinit();
         try self.normals.deinit();
         try self.normal_indices.deinit();
@@ -176,6 +181,7 @@ pub const PathTracer = struct {
                 transforms: buffers.Array(gpu_structs.Transform),
             },
             materials: buffers.Array(gpu_structs.Material),
+            textures: buffers.Array(hip.c.hipTextureObject_t),
             framebuffer: hip.c.hipDeviceptr_t,
             accumulation_buffer: hip.c.hipDeviceptr_t,
             rng_seed_buffer: hip.c.hipDeviceptr_t,
@@ -196,6 +202,7 @@ pub const PathTracer = struct {
                     .transforms = self.transforms,
                 },
                 .materials = self.materials,
+                .textures = self.textures.device_texture_objects,
                 .framebuffer = tb.buffer,
                 .accumulation_buffer = tb.accumulation_buffer,
                 .rng_seed_buffer = tb.rng_state_buffer,

@@ -21,7 +21,7 @@ pub fn run() !void {
     zglfw.WindowHint.set(.client_api, @intFromEnum(zglfw.ClientApi.no_api));
 
     var scene = ornament.Scene.init(allocator);
-    try @import("examples.zig").init_spheres_and_3_lucy(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
+    try @import("examples.zig").init_lucy_spheres_with_textures(&scene, @as(f32, @floatCast(app_config.WIDTH)) / @as(f32, @floatCast(app_config.HEIGHT)));
 
     //var path_tracer = try ornament.WgpuPathTracer.init(allocator, scene, null);
     var path_tracer = try ornament.HipPathTracer.init(allocator, scene);

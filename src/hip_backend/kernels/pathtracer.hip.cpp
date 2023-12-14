@@ -136,11 +136,11 @@ HOST_DEVICE float4 path_tracing(KernalLocalState *kls) {
         float3 attenuation;
         Ray scattered;
         Material material = kls->kg.materials[hit.material_index];
-        if (material.scatter(&kls->rnd, ray, hit, &attenuation, &scattered)) {
+        if (material.scatter(ray, hit, kls->rnd, kls->kg.textures, &attenuation, &scattered)) {
             ray = scattered;
             final_color = final_color * attenuation;
         } else {
-            final_color = final_color * material.emit(hit);
+            final_color = final_color * material.emit(hit, kls->kg.textures);
             break;
         }
     }

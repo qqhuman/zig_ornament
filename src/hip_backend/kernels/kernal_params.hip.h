@@ -12,6 +12,7 @@ struct KernalGlobals
 {
     Bvh bvh;
     Array<Material> materials;
+    Array<hipTextureObject_t> textures;
     float4* framebuffer;
     float4* accumulation_buffer;
     uint32_t* rng_seed_buffer;
