@@ -170,11 +170,12 @@ fn calculateBoundingBoxBlas(leafs: []Triangle) Aabb {
 }
 
 fn buildMeshBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh) std.mem.Allocator.Error!void {
-    var leafs = try std.ArrayList(Triangle).initCapacity(allocator, mesh.vertex_indices.items.len / 3);
+    const triangles_count = mesh.vertex_indices.items.len / 3;
+    var leafs = try std.ArrayList(Triangle).initCapacity(allocator, triangles_count);
     defer leafs.deinit();
 
     var mesh_triangle_index: usize = 0;
-    while (mesh_triangle_index < mesh.vertex_indices.items.len / 3) : (mesh_triangle_index += 1) {
+    while (mesh_triangle_index < triangles_count) : (mesh_triangle_index += 1) {
         const v0 = mesh.vertices.items[mesh.vertex_indices.items[mesh_triangle_index * 3]];
         const v1 = mesh.vertices.items[mesh.vertex_indices.items[mesh_triangle_index * 3 + 1]];
         const v2 = mesh.vertices.items[mesh.vertex_indices.items[mesh_triangle_index * 3 + 2]];
@@ -214,8 +215,7 @@ fn buildMeshBvhRecursive(allocator: std.mem.Allocator, bvh: *Bvh, mesh: *Mesh) s
 
     const mesh_root = try buildBvhBlasRecursive(allocator, bvh, leafs.items);
     try bvh.blas_nodes.append(mesh_root);
-    const mesh_top_id = @as(u32, @truncate(bvh.blas_nodes.items.len - 1));
-    mesh.bvh_id = mesh_top_id;
+    mesh.bvh_id = @as(u32, @truncate(bvh.blas_nodes.items.len - 1));
 }
 
 fn buildBvhBlasRecursive(allocator: std.mem.Allocator, bvh: *Bvh, leafs: []Triangle) std.mem.Allocator.Error!gpu_structs.BvhNode {

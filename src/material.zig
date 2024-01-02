@@ -12,6 +12,6 @@ pub const Material = struct {
     albedo: Color,
     fuzz: f32,
     ior: f32,
-    materia_type: MaterialType,
+    type: MaterialType,
     material_index: ?u32,
 };

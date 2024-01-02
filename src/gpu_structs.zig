@@ -32,28 +32,28 @@ pub const BvhNode = extern struct {
 
 pub const Material = extern struct {
     const Self = @This();
-    albedo_vec: [3]f32,
+    albedo: [3]f32,
     albedo_texture_index: u32,
     fuzz: f32,
     ior: f32,
-    materia_type: ornament.MaterialType,
+    type: ornament.MaterialType,
     _padding: u32 = undefined,
 
     pub fn from(material: *const ornament.Material) Self {
-        var albedo_vec = zmath.f32x4(1.0, 0.0, 1.0, 1.0);
+        var albedo = zmath.f32x4(1.0, 0.0, 1.0, 1.0);
         var albedo_texture_index: u32 = std.math.maxInt(u32);
 
         switch (material.albedo) {
-            .vec => |v| albedo_vec = v,
+            .vec => |v| albedo = v,
             .texture => |texture| albedo_texture_index = texture.texture_id.?,
         }
 
         return .{
-            .albedo_vec = zmath.vecToArr3(albedo_vec),
+            .albedo = zmath.vecToArr3(albedo),
             .albedo_texture_index = albedo_texture_index,
             .fuzz = material.fuzz,
             .ior = material.ior,
-            .materia_type = material.materia_type,
+            .type = material.type,
         };
     }
 };
